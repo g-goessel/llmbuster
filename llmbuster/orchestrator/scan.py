@@ -257,6 +257,8 @@ class ScanOrchestrator:
     ) -> tuple[Verdict, str | None, str | None]:
         if response.error is not None:
             return Verdict.ERROR, None, response.error
+        if response.reply is None:
+            return Verdict.ERROR, None, "no reply extracted from response"
         detectors = default_registry.build_from_payload(payload)
         if not detectors:
             return Verdict.SAFE, None, None

@@ -210,6 +210,15 @@ class ProfileTarget:
             reply = _coerce_reply(_extract_jsonpath(data, reply_path))
         else:
             reply = _coerce_reply(data)
+        if reply is None and isinstance(data, dict) and "error" in data:
+            err = data["error"]
+            if isinstance(err, dict) and "message" in err:
+                error_msg = f"API error: {err['message']}"
+            elif isinstance(err, str):
+                error_msg = f"API error: {err}"
+            else:
+                error_msg = f"API error: {err!s}"
+            return None, raw_response_text, Metrics(duration_ms=elapsed), {}, error_msg
         captures: dict[str, str] = {}
         for name, path in self._config.response.capture.items():
             value = _extract_jsonpath(data, path)

@@ -285,3 +285,38 @@ async def test_connection_error_surfaces_in_target_response() -> None:
     assert response.reply is None
     assert response.error is not None
     assert "http error" in response.error
+
+
+async def test_body_level_error_with_200_status(
+    mock_server: MockLLMServer,
+) -> None:
+    mock_server.configure(
+        "/chat",
+        MockResponse(
+            status=200,
+            json_body={"error": {"message": "Internal Server Error", "code": 500}},
+        ),
+    )
+    target = ProfileTarget(
+        ProfileConfig.model_validate(_json_profile()), client=_client(mock_server)
+    )
+    response = await target.send(_history((Role.USER, "hi")))
+    assert response.reply is None
+    assert response.error is not None
+    assert "Internal Server Error" in response.error
+
+
+async def test_body_level_error_string_with_200_status(
+    mock_server: MockLLMServer,
+) -> None:
+    mock_server.configure(
+        "/chat",
+        MockResponse(status=200, json_body={"error": "rate limited"}),
+    )
+    target = ProfileTarget(
+        ProfileConfig.model_validate(_json_profile()), client=_client(mock_server)
+    )
+    response = await target.send(_history((Role.USER, "hi")))
+    assert response.reply is None
+    assert response.error is not None
+    assert "rate limited" in response.error

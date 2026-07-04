@@ -198,6 +198,36 @@ async def test_error_handling() -> None:
     assert interactions[0].response_text is None
 
 
+async def test_null_reply_without_error_is_error() -> None:
+    target = StubTarget(reply="ok")
+    payloads = [_payload("p1", "hi", repeat=1)]
+    config = ScanConfig(run_id=1, concurrency=5)
+
+    class NullReplyTarget:
+        async def send(self, history: ChatHistory) -> TargetResponse:
+            return TargetResponse(
+                reply=None,
+                raw_request_json=history.to_messages_json(),
+                raw_response_text='{"error": "Internal Server Error"}',
+                metrics=Metrics(duration_ms=50),
+                error=None,
+            )
+
+    orchestrator = ScanOrchestrator(
+        target=target,  # type: ignore[arg-type]
+        config=config,
+        payloads=payloads,
+        owasp_categories=_categories(payloads),
+    )
+    orchestrator._target = NullReplyTarget()  # type: ignore[assignment]
+    await orchestrator.run()
+    interactions = _drain_interactions(orchestrator.interaction_queue)
+    assert len(interactions) == 1
+    assert interactions[0].verdict is Verdict.ERROR
+    assert interactions[0].detector_detail is not None
+    assert "no reply" in interactions[0].detector_detail
+
+
 async def test_shutdown_sentinel() -> None:
     payloads = [_payload("p1", "hi", repeat=1)]
     target = StubTarget(reply="ok")
