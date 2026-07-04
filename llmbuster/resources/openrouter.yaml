@@ -8,7 +8,7 @@ request:
     Content-Type: "application/json"
     Authorization: "Bearer ${env:OPENROUTER_API_KEY}"
   body: |
-    {"model": "__MODEL__", "messages": ${messages_json}, "reasoning": {"enabled": false}}
+    {"model": "__MODEL__", "messages": ${messages_json}, "reasoning": {"exclude": true}}
 
 response:
   type: json
