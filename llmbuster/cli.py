@@ -10,6 +10,7 @@ import typer
 from llmbuster.domain.models import ChatHistory, Message, Role
 from llmbuster.orchestrator import ScanConfig, ScanOrchestrator
 from llmbuster.payload.bundled import load_bundled_packs, load_bundled_packs_as_packs
+from llmbuster.report import ReportError, build_report, render_json, render_markdown
 from llmbuster.selftest import run_selftest
 from llmbuster.store import SQLiteStore, WriterTask
 from llmbuster.store.sqlite_store import RunRecord
@@ -278,6 +279,52 @@ def selftest(
     else:
         typer.echo("Self-test: FAILED")
         raise typer.Exit(code=1) from None
+
+
+@app.command("report")
+def report(
+    run_id: int = typer.Argument(..., help="Run ID to export."),
+    db: Path = typer.Option(
+        Path("./llmbuster.db"),
+        "--db",
+        help="SQLite database file.",
+    ),
+    fmt: str = typer.Option(
+        "markdown",
+        "--format",
+        "-f",
+        help="Output format: markdown or json.",
+    ),
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="Output file (default: stdout).",
+    ),
+) -> None:
+    if fmt not in {"markdown", "json"}:
+        typer.echo(
+            f"Error: unsupported format '{fmt}' (expected 'markdown' or 'json')",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    store = SQLiteStore(db)
+    try:
+        try:
+            data = build_report(store, run_id)
+        except ReportError:
+            typer.echo(f"Error: run {run_id} not found in {db}", err=True)
+            raise typer.Exit(code=1) from None
+        content = render_markdown(data) if fmt == "markdown" else render_json(data)
+    finally:
+        store.close()
+
+    if out is not None:
+        out.write_text(content, encoding="utf-8")
+        typer.echo(f"Wrote report to {out}")
+    else:
+        typer.echo(content)
 
 
 if __name__ == "__main__":
