@@ -10,6 +10,7 @@ import typer
 from llmbuster.domain.models import ChatHistory, Message, Role
 from llmbuster.orchestrator import ScanConfig, ScanOrchestrator
 from llmbuster.payload.bundled import load_bundled_packs, load_bundled_packs_as_packs
+from llmbuster.selftest import run_selftest
 from llmbuster.store import SQLiteStore, WriterTask
 from llmbuster.store.sqlite_store import RunRecord
 from llmbuster.target.factory import (
@@ -250,6 +251,33 @@ async def _print_progress(orchestrator: ScanOrchestrator) -> None:
                 typer.echo(f"  ESCALATION: {event.detail}")
     except asyncio.CancelledError:
         pass
+
+
+@app.command("selftest")
+def selftest(
+    pack: list[Path] | None = typer.Option(
+        None,
+        "--pack",
+        help="Additional payload pack YAML to validate (repeatable).",
+    ),
+) -> None:
+    result = run_selftest(extra_pack_paths=pack or [])
+    typer.echo(f"Packs: {result.pack_count}")
+    typer.echo(f"Payloads: {result.payload_count}")
+    typer.echo("Detector checks:")
+    for check in result.detector_checks:
+        status = "PASS" if check.passed else "FAIL"
+        typer.echo(f"  [{status}] {check.name}: {check.detail}")
+    if result.pack_errors:
+        typer.echo("Pack errors:")
+        for key, errs in result.pack_errors.items():
+            for err in errs:
+                typer.echo(f"  {key}: {err}")
+    if result.healthy:
+        typer.echo("Self-test: OK")
+    else:
+        typer.echo("Self-test: FAILED")
+        raise typer.Exit(code=1) from None
 
 
 if __name__ == "__main__":
