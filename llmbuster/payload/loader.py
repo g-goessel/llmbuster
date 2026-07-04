@@ -7,10 +7,7 @@ import yaml
 from pydantic import ValidationError
 
 from llmbuster.domain.models import Payload, PayloadPack
-
-KNOWN_MUTATIONS: frozenset[str] = frozenset(
-    {"base64", "leetspeak", "unicode_homoglyph", "translation"}
-)
+from llmbuster.payload.mutation import KNOWN_MUTATIONS
 
 
 class PackLoadError(ValueError):
