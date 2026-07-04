@@ -86,6 +86,12 @@ class LlmBusterApp(App[None]):
                 if event is None:
                     break
                 self.progress_events.append(event)
+                try:
+                    screen = self.get_screen("dashboard")
+                except Exception:
+                    screen = None
+                if screen is not None and isinstance(screen, DashboardScreen):
+                    screen.handle_event(event)
         except asyncio.CancelledError:
             raise
 
