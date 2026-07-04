@@ -1,3 +1,0 @@
-kind: openrouter
-name: "OpenRouter (free model)"
-model: "openai/gpt-oss-20b:free"
