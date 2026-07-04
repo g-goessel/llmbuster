@@ -5,11 +5,13 @@ from llmbuster.store.sqlite_store import (
     interaction_to_record,
     record_to_interaction,
 )
+from llmbuster.store.writer import WriterTask
 
 __all__ = [
     "InteractionRecord",
     "RunRecord",
     "SQLiteStore",
+    "WriterTask",
     "interaction_to_record",
     "record_to_interaction",
 ]
