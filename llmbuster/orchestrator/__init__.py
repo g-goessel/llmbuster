@@ -4,9 +4,19 @@ from llmbuster.orchestrator.aggregation import (
     aggregate_interactions,
     compute_reproducibility,
 )
+from llmbuster.orchestrator.scan import (
+    ProgressEvent,
+    ScanConfig,
+    ScanOrchestrator,
+    WorkItem,
+)
 
 __all__ = [
+    "ProgressEvent",
     "ReproducibilityScore",
+    "ScanConfig",
+    "ScanOrchestrator",
+    "WorkItem",
     "aggregate_all",
     "aggregate_interactions",
     "compute_reproducibility",
