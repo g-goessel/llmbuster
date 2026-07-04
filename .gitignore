@@ -1,0 +1,24 @@
+# Python / uv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.python-version
+
+# Caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Databases
+*.db
+*.sqlite*
+
+# OS / editor
+.DS_Store
