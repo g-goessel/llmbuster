@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -22,6 +23,19 @@ class ChatHistory(BaseModel):
 
     def append(self, msg: Message) -> None:
         self.messages.append(msg)
+
+    def append_user(self, content: str) -> None:
+        self.messages.append(Message(role=Role.USER, content=content))
+
+    def append_assistant(self, content: str) -> None:
+        self.messages.append(Message(role=Role.ASSISTANT, content=content))
+
+    def clone(self) -> ChatHistory:
+        return self.model_copy(deep=True)
+
+    def to_messages_json(self) -> str:
+        payload = [{"role": m.role.value, "content": m.content} for m in self.messages]
+        return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 
 class OwaspCategory(StrEnum):
