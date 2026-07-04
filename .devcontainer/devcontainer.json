@@ -1,0 +1,12 @@
+{
+    "name": "llmbuster",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "postCreateCommand": "uv sync",
+    "customizations": {
+        "zed": {
+            "extensions": ["python", "ruff", "toml"]
+        }
+    }
+}
