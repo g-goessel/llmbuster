@@ -18,6 +18,7 @@ from llmbuster.domain.models import (
     Verdict,
 )
 from llmbuster.domain.protocols import Target
+from llmbuster.orchestrator.aggregation import compute_reproducibility
 from llmbuster.payload.mutation import mutate
 
 
@@ -28,6 +29,7 @@ class ScanConfig(BaseModel):
     mutations: list[str] | None = None
     system_prompt: str | None = None
     categories: list[str] | None = None
+    escalate: bool = False
 
 
 class ProgressEvent(BaseModel):
@@ -47,6 +49,7 @@ class WorkItem:
     attempt_index: int
     mutation: str | None
     owasp_category: OwaspCategory
+    escalation_from: int | None = None
 
 
 class ScanOrchestrator:
@@ -66,6 +69,7 @@ class ScanOrchestrator:
         self._semaphore = asyncio.Semaphore(config.concurrency)
         self._max_concurrent = 0
         self._active = 0
+        self._collected_interactions: list[Interaction] = []
 
     @property
     def interaction_queue(self) -> asyncio.Queue[Interaction | None]:
@@ -120,8 +124,63 @@ class ScanOrchestrator:
         items = self.build_work_items()
         tasks = [asyncio.create_task(self._worker(item)) for item in items]
         await asyncio.gather(*tasks, return_exceptions=True)
+        if self._config.escalate:
+            await self._run_escalations()
         await self._interaction_queue.put(None)
         await self._progress_queue.put(None)
+
+    def _find_payload(self, payload_id: str) -> Payload | None:
+        for payload in self._payloads:
+            if payload.id == payload_id:
+                return payload
+        return None
+
+    async def _run_escalations(self) -> None:
+        initial = list(self._collected_interactions)
+        by_payload: dict[str, list[Interaction]] = {}
+        for interaction in initial:
+            by_payload.setdefault(interaction.payload_id, []).append(interaction)
+        items: list[WorkItem] = []
+        for payload_id, interactions in by_payload.items():
+            score = compute_reproducibility(
+                payload_id, [i.verdict for i in interactions]
+            )
+            if score.rolled_up_verdict is not Verdict.VULNERABLE:
+                continue
+            origin = self._find_payload(payload_id)
+            if origin is None or origin.escalation_to is None:
+                continue
+            target_payload = self._find_payload(origin.escalation_to)
+            if target_payload is None:
+                continue
+            cat = self._owasp_categories.get(target_payload.id)
+            if cat is None:
+                continue
+            await self._progress_queue.put(
+                ProgressEvent(
+                    payload_id=target_payload.id,
+                    attempt_index=0,
+                    mutation=None,
+                    owasp_category=cat.value,
+                    verdict=Verdict.VULNERABLE,
+                    metrics=Metrics(),
+                    phase="escalation",
+                    detail=f"escalating from {payload_id} to {target_payload.id}",
+                )
+            )
+            items.append(
+                WorkItem(
+                    payload=target_payload,
+                    attempt_index=0,
+                    mutation=None,
+                    owasp_category=cat,
+                    escalation_from=None,
+                )
+            )
+        if not items:
+            return
+        tasks = [asyncio.create_task(self._worker(item)) for item in items]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _worker(self, item: WorkItem) -> None:
         async with self._semaphore:
@@ -165,7 +224,7 @@ class ScanOrchestrator:
                     owasp_category=item.owasp_category,
                     attempt_index=item.attempt_index,
                     mutation=item.mutation,
-                    escalation_from=None,
+                    escalation_from=item.escalation_from,
                     sent_history_json=history.to_messages_json(),
                     raw_request_json=response.raw_request_json,
                     raw_response_text=response.raw_response_text,
@@ -176,6 +235,7 @@ class ScanOrchestrator:
                     detector_detail=detector_detail,
                 )
                 await self._interaction_queue.put(interaction)
+                self._collected_interactions.append(interaction)
                 phase = "error" if verdict is Verdict.ERROR else "completed"
                 await self._progress_queue.put(
                     ProgressEvent(
