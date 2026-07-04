@@ -27,6 +27,7 @@ dev = [
     "fastapi",
     "uvicorn",
 ]
+pyinstaller = ["pyinstaller"]
 
 [build-system]
 requires = ["hatchling"]
@@ -38,6 +39,7 @@ packages = ["llmbuster"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+exclude = ["llmbuster.spec"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
@@ -58,3 +60,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "docker: marks tests that require a running docker daemon (deselect with -m 'not docker')",
+]

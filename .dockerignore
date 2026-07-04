@@ -1,0 +1,29 @@
+.git
+.github/
+.devcontainer/
+dist/
+build/
+*.egg-info/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.python-version
+
+# Test assets not needed in the image
+tests/
+
+# Local databases
+*.db
+*.sqlite*
+
+# User-created target profiles (local only)
+/openrouter.yaml
+/my-target.yaml
+
+# Editor / OS
+.DS_Store

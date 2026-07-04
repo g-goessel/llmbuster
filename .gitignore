@@ -23,6 +23,6 @@ build/
 # OS / editor
 .DS_Store
 
-# User-created target profiles (local only)
-openrouter.yaml
-my-target.yaml
+# User-created target profiles (local only, at repo root only)
+/openrouter.yaml
+/my-target.yaml
