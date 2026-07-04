@@ -4,12 +4,12 @@ import json
 
 import httpx
 import pytest
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 
 from llmbuster.domain import ChatHistory, Message, Role, Target
 from llmbuster.target.profile import ProfileConfig, ProfileTarget, SessionMode
 from tests.mock_server import MockLLMServer, MockResponse
+
+MOCK_BASE_URL = "http://mock"
 
 JSON_BODY = (
     '{"user_message":"${last_user_message}",'
@@ -75,13 +75,7 @@ def _sse_profile(url: str = "http://mock/chat/stream") -> dict[str, object]:
 
 def _client(server: MockLLMServer) -> httpx.AsyncClient:
     return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=server), base_url="http://mock"
-    )
-
-
-def _client_from_app(app: FastAPI) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://mock"
+        transport=httpx.ASGITransport(app=server), base_url=MOCK_BASE_URL
     )
 
 
@@ -237,7 +231,9 @@ async def test_sse_openai_style_delta_tokens(mock_server: MockLLMServer) -> None
 
 
 async def test_http_error_surfaces_error(mock_server: MockLLMServer) -> None:
-    mock_server.configure("/chat", MockResponse(status=500, json_body={"error": "boom"}))
+    mock_server.configure(
+        "/chat", MockResponse(status=500, json_body={"error": "boom"})
+    )
     target = ProfileTarget(
         ProfileConfig.model_validate(_json_profile()), client=_client(mock_server)
     )
@@ -262,18 +258,18 @@ async def test_env_missing_raises_during_interpolation(
         await target.send(_history((Role.USER, "hi")))
 
 
-async def test_jsonpath_reply_extraction_nested() -> None:
-    app = FastAPI()
-
-    async def custom_handler() -> JSONResponse:
-        return JSONResponse(content={"result": {"output": {"text": "deep reply"}}})
-
-    app.add_api_route("/chat", custom_handler, methods=["POST"], response_model=None)
+async def test_jsonpath_reply_extraction_nested(
+    mock_server: MockLLMServer,
+) -> None:
+    mock_server.configure(
+        "/chat",
+        MockResponse(json_body={"result": {"output": {"text": "deep reply"}}}),
+    )
     profile = _json_profile()
     profile["request"]["body"] = '{"user_message":"${last_user_message}"}'
     profile["response"] = {"type": "json", "reply_path": "$.result.output.text"}
     target = ProfileTarget(
-        ProfileConfig.model_validate(profile), client=_client_from_app(app)
+        ProfileConfig.model_validate(profile), client=_client(mock_server)
     )
     response = await target.send(_history((Role.USER, "q")))
     assert response.reply == "deep reply"
@@ -281,7 +277,9 @@ async def test_jsonpath_reply_extraction_nested() -> None:
 
 async def test_connection_error_surfaces_in_target_response() -> None:
     target = ProfileTarget(
-        ProfileConfig.model_validate(_json_profile(url="http://nonexistent.invalid/chat"))
+        ProfileConfig.model_validate(
+            _json_profile(url="http://nonexistent.invalid/chat")
+        )
     )
     response = await target.send(_history((Role.USER, "hi")))
     assert response.reply is None

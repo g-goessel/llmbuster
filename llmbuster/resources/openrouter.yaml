@@ -1,0 +1,18 @@
+kind: profile
+name: "OpenRouter"
+
+request:
+  method: POST
+  url: "https://openrouter.ai/api/v1/chat/completions"
+  headers:
+    Content-Type: "application/json"
+    Authorization: "Bearer ${env:OPENROUTER_API_KEY}"
+  body: |
+    {"model": "__MODEL__", "messages": ${messages_json}}
+
+response:
+  type: json
+  reply_path: "$.choices[0].message.content"
+
+session:
+  mode: stateless
