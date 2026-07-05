@@ -277,10 +277,10 @@ class HistoryPanel(Vertical):
 
     def _format_response_pane(self, rec: InteractionRecord) -> str:
         sections = [
-            self._format_raw_response(rec),
             self._format_extracted_reply(rec),
             self._format_detector(rec),
             self._format_metrics(rec),
+            self._format_raw_response(rec),
         ]
         return "\n\n".join(sections)
 
