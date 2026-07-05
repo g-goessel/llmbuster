@@ -69,6 +69,8 @@ All three must pass before committing.
 - Do NOT add comments to code unless explicitly requested.
 - Follow existing file style; mimic neighboring code.
 - ruff rules: E, F, I, UP, B, SIM, ANN. Line length 100. Target py312.
+- When changing CLI commands, options, payload packs, target profiles,
+  metrics, or TUI features, update the corresponding `docs/` page.
 
 ## Git
 - One commit per task.

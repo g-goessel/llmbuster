@@ -16,6 +16,9 @@ __pycache__/
 dist/
 build/
 
+# Docs build output (Zensical)
+site/
+
 # Databases
 *.db
 *.db-shm
