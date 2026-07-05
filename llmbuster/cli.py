@@ -21,6 +21,7 @@ from llmbuster.target.factory import (
     init_profile,
     load_target,
 )
+from llmbuster.tui import LlmBusterApp
 
 app = typer.Typer(
     name="llmbuster",
@@ -325,6 +326,12 @@ def report(
         typer.echo(f"Wrote report to {out}")
     else:
         typer.echo(content)
+
+
+@app.command("tui")
+def tui() -> None:
+    """Launch the interactive terminal UI."""
+    LlmBusterApp().run()
 
 
 if __name__ == "__main__":

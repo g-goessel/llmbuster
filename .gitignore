@@ -18,6 +18,8 @@ build/
 
 # Databases
 *.db
+*.db-shm
+*.db-wal
 *.sqlite*
 
 # OS / editor
