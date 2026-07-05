@@ -12,6 +12,7 @@ class MockResponse:
     status: int = 200
     json_body: dict[str, Any] | None = None
     text_body: str | None = None
+    raw_body: str | None = None
     sse_tokens: list[str] = field(default_factory=list)
     sse_delay: float = 0.0
     headers: dict[str, str] = field(default_factory=dict)
@@ -58,6 +59,14 @@ class MockLLMServer:
         elif response.text_body is not None:
             await self._send(
                 send, response.status, response.text_body.encode(), "text/plain", response.headers
+            )
+        elif response.raw_body is not None:
+            await self._send(
+                send,
+                response.status,
+                response.raw_body.encode(),
+                "application/json",
+                response.headers,
             )
         else:
             await self._send(send, response.status, b"", "text/plain", response.headers)

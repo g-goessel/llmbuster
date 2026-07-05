@@ -186,7 +186,7 @@ class ProfileTarget:
         start = time.perf_counter()
         resp = await client.request(method, url, headers=headers, content=body)
         elapsed = round((time.perf_counter() - start) * 1000)
-        raw_response_text = resp.text
+        raw_response_text = resp.text.strip()
         if resp.status_code >= 400:
             return (
                 None,
@@ -236,7 +236,7 @@ class ProfileTarget:
         start = time.perf_counter()
         resp = await client.request(method, url, headers=headers, content=body)
         elapsed = round((time.perf_counter() - start) * 1000)
-        raw_response_text = resp.text
+        raw_response_text = resp.text.strip()
         if resp.status_code >= 400:
             return (
                 None,
@@ -245,7 +245,7 @@ class ProfileTarget:
                 {},
                 f"HTTP {resp.status_code}",
             )
-        return resp.text, raw_response_text, Metrics(duration_ms=elapsed), {}, None
+        return raw_response_text, raw_response_text, Metrics(duration_ms=elapsed), {}, None
 
     async def _send_sse(
         self,
@@ -276,7 +276,7 @@ class ProfileTarget:
                     first_token = now
                 last_token = now
                 tokens.append(token)
-        raw_response_text = "\n".join(raw_lines)
+        raw_response_text = "\n".join(raw_lines).strip()
         if status_code >= 400:
             return None, raw_response_text, Metrics(), {}, f"HTTP {status_code}"
         ttft_ms = (

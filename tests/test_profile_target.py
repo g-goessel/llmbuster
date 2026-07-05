@@ -320,3 +320,37 @@ async def test_body_level_error_string_with_200_status(
     assert response.reply is None
     assert response.error is not None
     assert "rate limited" in response.error
+
+
+async def test_leading_whitespace_stripped_from_raw_response(
+    mock_server: MockLLMServer,
+) -> None:
+    padded_body = "\n\n          \n\n          \n" + json.dumps(
+        {"data": {"reply": "hi"}}
+    )
+    mock_server.configure("/chat", MockResponse(raw_body=padded_body))
+    target = ProfileTarget(
+        ProfileConfig.model_validate(_json_profile()), client=_client(mock_server)
+    )
+    response = await target.send(_history((Role.USER, "hi")))
+    assert response.error is None
+    assert response.reply == "hi"
+    assert response.raw_response_text is not None
+    assert response.raw_response_text.startswith("{")
+    assert not response.raw_response_text.startswith(("\n", " "))
+
+
+async def test_trailing_whitespace_stripped_from_raw_response(
+    mock_server: MockLLMServer,
+) -> None:
+    padded_body = json.dumps({"data": {"reply": "hi"}}) + "\n\n          \n\n          \n"
+    mock_server.configure("/chat", MockResponse(raw_body=padded_body))
+    target = ProfileTarget(
+        ProfileConfig.model_validate(_json_profile()), client=_client(mock_server)
+    )
+    response = await target.send(_history((Role.USER, "hi")))
+    assert response.error is None
+    assert response.reply == "hi"
+    assert response.raw_response_text is not None
+    assert response.raw_response_text.endswith("}")
+    assert not response.raw_response_text.endswith(("\n", " "))
