@@ -603,6 +603,16 @@ artifact exists after **Milestone 5**.
 - **DuckDB export** for heavy analytical blog queries.
 - **Real `translation` mutation.**
 - **Scan resume / checkpointing.**
+- **Escalation provenance fix:** `_run_escalations` hardcodes
+  `escalation_from=None` because interaction DB ids are assigned
+  asynchronously by the WriterTask (the orchestrator's
+  `_collected_interactions` don't have `id` populated yet). Fix: either
+  wait for the writer to flush before running escalations, or pass the
+  DB id back via the interaction queue. Affects `scan.py:181`.
+- **Escalation session scope:** `_worker` always creates a fresh
+  `ChatHistory()`, discarding session state from the originating
+  interaction. For `server_managed` targets, escalations should carry
+  forward the captures/session from the original. Affects `scan.py:208`.
 
 ---
 
