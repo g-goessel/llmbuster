@@ -42,11 +42,30 @@ class HistoryPanel(Vertical):
     }
     HistoryPanel #detail {
         height: 1fr;
+    }
+    HistoryPanel #detail-summary {
+        height: 1;
+        margin-bottom: 1;
+        text-style: bold;
+    }
+    HistoryPanel #detail-split {
+        height: 1fr;
+    }
+    HistoryPanel #detail-request {
+        width: 1fr;
+        height: 1fr;
         border: round $panel;
         padding: 0 1;
     }
-    HistoryPanel #detail Static {
-        margin-bottom: 1;
+    HistoryPanel #detail-response {
+        width: 1fr;
+        height: 1fr;
+        border: round $panel;
+        padding: 0 1;
+    }
+    HistoryPanel #detail-request-content,
+    HistoryPanel #detail-response-content {
+        height: 1fr;
     }
     """
 
@@ -82,16 +101,23 @@ class HistoryPanel(Vertical):
                 id="verdict-filter",
             )
         yield DataTable(id="history-table", cursor_type="row")
-        with VerticalScroll(id="detail"):
-            yield Static(
-                "Select a row to view details.",
-                id="detail-sent-history",
-                markup=False,
-            )
-            yield Static("", id="detail-raw-request", markup=False)
-            yield Static("", id="detail-raw-response", markup=False)
-            yield Static("", id="detail-detector", markup=False)
-            yield Static("", id="detail-metrics", markup=False)
+        with Vertical(id="detail"):
+            yield Static("Select a row to view details.", id="detail-summary")
+            with Horizontal(id="detail-split"):
+                with VerticalScroll(id="detail-request") as req_scroll:
+                    req_scroll.border_title = "Request"
+                    yield Static(
+                        "Select a row to view details.",
+                        id="detail-request-content",
+                        markup=False,
+                    )
+                with VerticalScroll(id="detail-response") as resp_scroll:
+                    resp_scroll.border_title = "Response"
+                    yield Static(
+                        "Select a row to view details.",
+                        id="detail-response-content",
+                        markup=False,
+                    )
 
     def on_mount(self) -> None:
         table = self.query_one("#history-table", DataTable)
@@ -207,17 +233,51 @@ class HistoryPanel(Vertical):
         self._render_detail(record)
 
     def _render_detail(self, rec: InteractionRecord) -> None:
-        self.query_one("#detail-sent-history", Static).update(
-            self._format_sent_history(rec)
+        self.query_one("#detail-summary", Static).update(self._format_summary(rec))
+        self.query_one("#detail-request-content", Static).update(
+            self._format_request_pane(rec)
         )
-        self.query_one("#detail-raw-request", Static).update(
-            self._format_raw_request(rec)
+        self.query_one("#detail-response-content", Static).update(
+            self._format_response_pane(rec)
         )
-        self.query_one("#detail-raw-response", Static).update(
-            self._format_raw_response(rec)
+
+    def _format_summary(self, rec: InteractionRecord) -> str:
+        verdict = rec.verdict if rec.verdict else "-"
+        detector = rec.detector_id if rec.detector_id else "-"
+        ttft = f"{rec.ttft_ms}ms" if rec.ttft_ms is not None else "-"
+        duration = f"{rec.duration_ms}ms" if rec.duration_ms is not None else "-"
+        tps = f"{rec.tps:.1f}" if rec.tps is not None else "-"
+        return (
+            f"verdict={verdict}  detector={detector}  "
+            f"ttft={ttft}  duration={duration}  tps={tps}"
         )
-        self.query_one("#detail-detector", Static).update(self._format_detector(rec))
-        self.query_one("#detail-metrics", Static).update(self._format_metrics(rec))
+
+    def _format_request_pane(self, rec: InteractionRecord) -> str:
+        sections = [
+            self._format_sent_history(rec),
+            self._format_raw_request(rec),
+        ]
+        return "\n\n".join(sections)
+
+    def _format_response_pane(self, rec: InteractionRecord) -> str:
+        sections = [
+            self._format_raw_response(rec),
+            self._format_extracted_reply(rec),
+            self._format_detector(rec),
+            self._format_metrics(rec),
+        ]
+        return "\n\n".join(sections)
+
+    def _format_extracted_reply(self, rec: InteractionRecord) -> str:
+        lines = ["=== Extracted Reply ==="]
+        text = rec.response_text
+        if text is None:
+            lines.append("(none)")
+        elif len(text) > _MAX_RESPONSE_CHARS:
+            lines.append(text[:_MAX_RESPONSE_CHARS] + "\n… (truncated)")
+        else:
+            lines.append(text)
+        return "\n".join(lines)
 
     def _format_sent_history(self, rec: InteractionRecord) -> str:
         lines = ["=== Sent History ==="]

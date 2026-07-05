@@ -182,17 +182,21 @@ async def test_row_select_shows_detail(
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        detail_text = _detail_text(panel)
-        assert "system" in detail_text or "user" in detail_text
-        assert "Raw Request" in detail_text
-        assert '"body": "hi"' in detail_text or "hi" in detail_text
-        assert "Raw Response" in detail_text
-        assert "raw-response-body" in detail_text
-        assert "Detector" in detail_text
-        assert "canary" in detail_text
-        assert "token PWNED found" in detail_text
-        assert "Metrics" in detail_text
-        assert "ttft_ms: 12" in detail_text
+        request_text = _request_text(panel)
+        response_text = _response_text(panel)
+        summary_text = _summary_text(panel)
+        assert "Sent History" in request_text
+        assert "Raw Request" in request_text
+        assert '"body": "hi"' in request_text
+        assert "Raw Response" in response_text
+        assert "raw-response-body" in response_text
+        assert "Detector" in response_text
+        assert "canary" in response_text
+        assert "token PWNED found" in response_text
+        assert "Metrics" in response_text
+        assert "ttft_ms: 12" in response_text
+        assert "vulnerable" in summary_text
+        assert "canary" in summary_text
     store.close()
 
 
@@ -282,7 +286,13 @@ async def test_run_picker_empty_when_no_runs(tmp_path: Path) -> None:
     store.close()
 
 
-def _detail_text(panel: HistoryPanel) -> str:
-    detail = panel.query_one("#detail")
-    statics = detail.query(Static)
-    return "\n".join(str(s.content) for s in statics)
+def _request_text(panel: HistoryPanel) -> str:
+    return str(panel.query_one("#detail-request-content", Static).content)
+
+
+def _response_text(panel: HistoryPanel) -> str:
+    return str(panel.query_one("#detail-response-content", Static).content)
+
+
+def _summary_text(panel: HistoryPanel) -> str:
+    return str(panel.query_one("#detail-summary", Static).content)
