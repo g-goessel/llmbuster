@@ -82,6 +82,7 @@ class Interaction(BaseModel):
     attempt_index: int
     mutation: str | None = None
     escalation_from: int | None = None
+    replayed_from: int | None = None
     sent_history_json: str
     raw_request_json: str
     raw_response_text: str | None

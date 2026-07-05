@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from textual.widgets import ContentSwitcher, HelpPanel, Tab, Tabs
+from textual.pilot import Pilot
+from textual.widgets import ContentSwitcher, HelpPanel, Select, Tab, Tabs
 
 from llmbuster.domain.models import (
     ChatHistory,
@@ -14,11 +15,16 @@ from llmbuster.domain.models import (
     Verdict,
 )
 from llmbuster.orchestrator import ProgressEvent, ScanConfig, ScanOrchestrator
+from llmbuster.target.factory import LoadedTarget, TargetKind
 from llmbuster.tui import LlmBusterApp
-from llmbuster.tui.screens.config_screen import ConfigPanel
+from llmbuster.tui.screens import (
+    ConfigPanel,
+    FindingsPanel,
+    HistoryPanel,
+    ScanConfigResult,
+    ScanConfigSubmitted,
+)
 from llmbuster.tui.screens.dashboard_screen import DashboardPanel
-from llmbuster.tui.screens.findings_screen import FindingsPanel
-from llmbuster.tui.screens.history_screen import HistoryPanel
 
 
 def _payload(pid: str = "p1", prompt: str = "hi") -> Payload:
@@ -220,3 +226,83 @@ async def test_drain_forwards_to_dashboard_panel(tmp_path: Path) -> None:
         assert app._drainer is not None
         await app._drainer
         assert str(panel.query_one("#findings", Static).content) == "1"
+
+
+def _scan_config_result() -> ScanConfigResult:
+    return ScanConfigResult(
+        loaded_target=LoadedTarget(
+            target=StubTarget(),
+            kind=TargetKind.PROFILE,
+            name="stub",
+        ),
+        system_prompt=None,
+        concurrency=5,
+        repeat=1,
+        categories=None,
+        escalate=False,
+    )
+
+
+async def _submit_and_wait(pilot: Pilot, app: LlmBusterApp) -> None:
+    app.post_message(ScanConfigSubmitted(_scan_config_result()))
+    for _ in range(10):
+        await pilot.pause()
+        if app._scan_task is not None:
+            break
+
+
+@pytest.mark.asyncio
+async def test_scan_launch_from_config(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await _submit_and_wait(pilot, app)
+
+        runs = app._store.list_runs()
+        assert len(runs) == 1
+        assert runs[0].target_name == "stub"
+        assert runs[0].target_kind == "profile"
+
+        tabs = app.query_one("#nav-tabs", Tabs)
+        assert tabs.active == "tab-dashboard"
+        switcher = app.query_one("#content", ContentSwitcher)
+        assert switcher.current == "dashboard-panel"
+
+        assert app._scan_task is not None
+        assert app._writer_task is not None
+        await app._scan_task
+        await app._writer_task
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_scan_completes_and_refreshes(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await _submit_and_wait(pilot, app)
+
+        if app._scan_task is not None:
+            await app._scan_task
+        if app._writer_task is not None:
+            await app._writer_task
+        if app._await_task is not None:
+            await app._await_task
+        await pilot.pause()
+
+        runs = app._store.list_runs()
+        assert len(runs) == 1
+        run_id = runs[0].id
+        assert run_id is not None
+        interactions = app._store.interactions_for_run(run_id)
+        assert len(interactions) > 0
+
+        history = app.query_one("#history-panel", HistoryPanel)
+        history_select = history.query_one("#run-select", Select)
+        assert isinstance(history_select.value, int)
+        assert history_select.value == run_id
+
+        findings = app.query_one("#findings-panel", FindingsPanel)
+        findings_select = findings.query_one("#run-select", Select)
+        assert isinstance(findings_select.value, int)
+        assert findings_select.value == run_id

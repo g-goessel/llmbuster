@@ -11,6 +11,7 @@ from llmbuster.domain.models import ChatHistory, Message, Role
 from llmbuster.domain.protocols import Target
 from llmbuster.orchestrator import ScanConfig, ScanOrchestrator
 from llmbuster.payload.bundled import load_bundled_packs, load_bundled_packs_as_packs
+from llmbuster.repeater import _parse_history, replay_interaction
 from llmbuster.report import ReportError, build_report, render_json, render_markdown
 from llmbuster.selftest import run_selftest
 from llmbuster.store import SQLiteStore, WriterTask
@@ -344,6 +345,65 @@ def report(
         typer.echo(f"Wrote report to {out}")
     else:
         typer.echo(content)
+
+
+@app.command("replay")
+def replay(
+    interaction_id: int = typer.Argument(
+        ..., help="Interaction ID to replay."
+    ),
+    profile: Path = typer.Argument(..., help="Target profile YAML."),
+    db: Path = typer.Option(
+        Path("./llmbuster.db"),
+        "--db",
+        help="SQLite database file.",
+    ),
+    edit: str | None = typer.Option(
+        None,
+        "--edit",
+        help="Override the last user message content.",
+    ),
+) -> None:
+    try:
+        loaded = load_target(profile)
+    except TargetLoadError as exc:
+        typer.echo(f"Error loading target: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+
+    store = SQLiteStore(db)
+    try:
+        original = store.interaction_by_id(interaction_id)
+        if original is None:
+            typer.echo(f"Error: interaction {interaction_id} not found", err=True)
+            raise typer.Exit(code=1) from None
+
+        edited_history: ChatHistory | None = None
+        if edit is not None:
+            edited_history = _parse_history(original.sent_history_json)
+            for msg in reversed(edited_history.messages):
+                if msg.role is Role.USER:
+                    msg.content = edit
+                    break
+
+        try:
+            new_record = asyncio.run(
+                replay_interaction(
+                    store, interaction_id, loaded.target, edited_history
+                )
+            )
+        except ValueError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+        except Exception as exc:
+            typer.echo(f"Error sending message: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+    finally:
+        store.close()
+
+    typer.echo(f"New interaction id: {new_record.id}")
+    typer.echo(f"Replayed from: {interaction_id}")
+    typer.echo(f"Verdict: {new_record.verdict}")
+    typer.echo(f"Response: {new_record.response_text or ''}")
 
 
 @app.command("tui")

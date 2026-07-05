@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from textual import on
@@ -10,10 +12,12 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.css.query import NoMatches
 from textual.events import Unmount
-from textual.widgets import ContentSwitcher, Footer, Header, Tab, Tabs
+from textual.widgets import ContentSwitcher, Footer, Header, Static, Tab, Tabs
 
-from llmbuster.orchestrator import ProgressEvent, ScanOrchestrator
-from llmbuster.store.sqlite_store import SQLiteStore
+from llmbuster.orchestrator import ProgressEvent, ScanConfig, ScanOrchestrator
+from llmbuster.payload.bundled import load_bundled_packs, load_bundled_packs_as_packs
+from llmbuster.store import WriterTask
+from llmbuster.store.sqlite_store import RunRecord, SQLiteStore
 from llmbuster.tui.screens import (
     ConfigPanel,
     DashboardPanel,
@@ -58,6 +62,9 @@ class LlmBusterApp(App[None]):
         self.progress_events: list[ProgressEvent] = []
         self._store: SQLiteStore = SQLiteStore(db_path)
         self.last_config: ScanConfigResult | None = None
+        self._scan_task: asyncio.Task[None] | None = None
+        self._writer_task: asyncio.Task[None] | None = None
+        self._await_task: asyncio.Task[None] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -113,8 +120,64 @@ class LlmBusterApp(App[None]):
             raise
 
     @on(ScanConfigSubmitted)
-    def _on_scan_config_submitted(self, event: ScanConfigSubmitted) -> None:
+    async def _on_scan_config_submitted(self, event: ScanConfigSubmitted) -> None:
         self.last_config = event.result
+        await self._start_scan(event.result)
+
+    async def _start_scan(self, result: ScanConfigResult) -> None:
+        packs = load_bundled_packs_as_packs()
+        payloads = load_bundled_packs()
+        owasp_categories = {
+            p.id: pack.category for pack in packs for p in pack.payloads
+        }
+        run_id = self._store.create_run(
+            RunRecord(
+                started_at=datetime.now(UTC).isoformat(),
+                target_kind=result.loaded_target.kind.value,
+                target_name=result.loaded_target.name,
+                system_prompt=result.system_prompt,
+                config_json=json.dumps(
+                    {
+                        "concurrency": result.concurrency,
+                        "repeat": result.repeat,
+                        "categories": result.categories,
+                        "escalate": result.escalate,
+                    }
+                ),
+            )
+        )
+        config = ScanConfig(
+            run_id=run_id,
+            concurrency=result.concurrency,
+            repeat=result.repeat,
+            system_prompt=result.system_prompt,
+            categories=result.categories,
+            escalate=result.escalate,
+        )
+        orchestrator = ScanOrchestrator(
+            result.loaded_target.target, config, payloads, owasp_categories
+        )
+        self.attach_orchestrator(orchestrator)
+        self._writer_task = asyncio.create_task(
+            WriterTask(self._store, orchestrator.interaction_queue).run()
+        )
+        self._scan_task = asyncio.create_task(orchestrator.run())
+        self._await_task = asyncio.create_task(self._await_scan())
+        with contextlib.suppress(NoMatches):
+            self.query_one("#config-panel", ConfigPanel).query_one(
+                "#status", Static
+            ).update(f"Scan started — Run {run_id}")
+        self._activate_tab("tab-dashboard")
+
+    async def _await_scan(self) -> None:
+        if self._scan_task is not None:
+            await self._scan_task
+        if self._writer_task is not None:
+            await self._writer_task
+        with contextlib.suppress(NoMatches):
+            self.query_one("#history-panel", HistoryPanel).refresh_runs()
+        with contextlib.suppress(NoMatches):
+            self.query_one("#findings-panel", FindingsPanel).refresh_runs()
 
     @on(Tabs.TabActivated)
     def _on_tab_activated(self, event: Tabs.TabActivated) -> None:
@@ -127,6 +190,16 @@ class LlmBusterApp(App[None]):
 
     @on(Unmount)
     async def on_unmount(self) -> None:
+        for task in (self._scan_task, self._writer_task, self._await_task):
+            if task is not None and not task.done():
+                task.cancel()
+        for task in (self._scan_task, self._writer_task, self._await_task):
+            if task is not None:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        self._scan_task = None
+        self._writer_task = None
+        self._await_task = None
         drainer = self._drainer
         if drainer is not None and not drainer.done():
             drainer.cancel()

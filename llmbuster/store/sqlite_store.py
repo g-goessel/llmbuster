@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS interactions (
     attempt_index   INTEGER NOT NULL,
     mutation        TEXT,
     escalation_from INTEGER REFERENCES interactions(id),
+    replayed_from   INTEGER REFERENCES interactions(id),
 
     sent_history_json TEXT NOT NULL,
     raw_request_json  TEXT NOT NULL,
@@ -55,11 +56,12 @@ CREATE INDEX IF NOT EXISTS idx_inter_payload  ON interactions(run_id, payload_id
 
 _INTERACTION_COLUMNS = (
     "run_id, payload_id, owasp_category, attempt_index, mutation, escalation_from, "
+    "replayed_from, "
     "sent_history_json, raw_request_json, raw_response_text, response_text, "
     "ttft_ms, duration_ms, tps, prompt_tokens, completion_tokens, "
     "verdict, detector_id, detector_detail, created_at"
 )
-_INTERACTION_PLACEHOLDERS = ", ".join(["?"] * 19)
+_INTERACTION_PLACEHOLDERS = ", ".join(["?"] * 20)
 
 
 class RunRecord(BaseModel):
@@ -80,6 +82,7 @@ class InteractionRecord(BaseModel):
     attempt_index: int
     mutation: str | None = None
     escalation_from: int | None = None
+    replayed_from: int | None = None
     sent_history_json: str
     raw_request_json: str
     raw_response_text: str | None = None
@@ -103,6 +106,7 @@ def interaction_to_record(interaction: Interaction, run_id: int) -> InteractionR
         attempt_index=interaction.attempt_index,
         mutation=interaction.mutation,
         escalation_from=interaction.escalation_from,
+        replayed_from=interaction.replayed_from,
         sent_history_json=interaction.sent_history_json,
         raw_request_json=interaction.raw_request_json,
         raw_response_text=interaction.raw_response_text,
@@ -126,6 +130,7 @@ def record_to_interaction(record: InteractionRecord) -> Interaction:
         attempt_index=record.attempt_index,
         mutation=record.mutation,
         escalation_from=record.escalation_from,
+        replayed_from=record.replayed_from,
         sent_history_json=record.sent_history_json,
         raw_request_json=record.raw_request_json,
         raw_response_text=record.raw_response_text,
@@ -159,7 +164,17 @@ class SQLiteStore:
     def _create_schema(self) -> None:
         cur = self._conn.cursor()
         cur.executescript(_SCHEMA_SQL)
+        self._migrate_interactions_replayed_from(cur)
         cur.close()
+
+    def _migrate_interactions_replayed_from(self, cur: sqlite3.Cursor) -> None:
+        cur.execute("PRAGMA table_info(interactions)")
+        cols = {r["name"] for r in cur.fetchall()}
+        if "replayed_from" not in cols:
+            cur.execute(
+                "ALTER TABLE interactions "
+                "ADD COLUMN replayed_from INTEGER REFERENCES interactions(id)"
+            )
 
     def close(self) -> None:
         self._conn.close()
@@ -210,6 +225,7 @@ class SQLiteStore:
                 interaction.attempt_index,
                 interaction.mutation,
                 interaction.escalation_from,
+                interaction.replayed_from,
                 interaction.sent_history_json,
                 interaction.raw_request_json,
                 interaction.raw_response_text,
@@ -289,6 +305,7 @@ class SQLiteStore:
             attempt_index=row["attempt_index"],
             mutation=row["mutation"],
             escalation_from=row["escalation_from"],
+            replayed_from=row["replayed_from"],
             sent_history_json=row["sent_history_json"],
             raw_request_json=row["raw_request_json"],
             raw_response_text=row["raw_response_text"],
