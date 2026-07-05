@@ -2,9 +2,7 @@
 name = "llmbuster"
 site_name = "llmbuster"
 description = "A terminal-based (TUI) security scanner for assessing LLM implementations against the OWASP Top 10 for LLMs."
-
-[project.urls]
-"GitHub" = "https://github.com/g-goessel/llmbuster"
+repo_url = "https://github.com/g-goessel/llmbuster"
 
 [project.license]
 type = "Apache License 2.0"
