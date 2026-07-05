@@ -31,8 +31,9 @@ class ScanConfigSubmitted(Message):
 
 
 class ConfigPanel(Vertical):
-    CSS = """
+    DEFAULT_CSS = """
     ConfigPanel {
+        align: center top;
         height: 1fr;
     }
     ConfigPanel > VerticalScroll {

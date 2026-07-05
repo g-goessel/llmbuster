@@ -20,7 +20,7 @@ from llmbuster.tui.screens.history_screen import HistoryPanel
 class MainScreen(Screen[None]):
     AUTO_FOCUS: ClassVar[str | None] = None
 
-    CSS = """
+    DEFAULT_CSS = """
     MainScreen {
         layout: vertical;
     }

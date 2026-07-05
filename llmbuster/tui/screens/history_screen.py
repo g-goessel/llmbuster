@@ -14,7 +14,7 @@ _MAX_RESPONSE_CHARS = 4000
 
 
 class HistoryPanel(Vertical):
-    CSS = """
+    DEFAULT_CSS = """
     HistoryPanel {
         layout: vertical;
         height: 1fr;

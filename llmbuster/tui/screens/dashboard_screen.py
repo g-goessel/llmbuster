@@ -11,7 +11,7 @@ _CATEGORIES: list[str] = [cat.value for cat in OwaspCategory]
 
 
 class DashboardPanel(Vertical):
-    CSS = """
+    DEFAULT_CSS = """
     DashboardPanel {
         align: center top;
         height: 1fr;

@@ -34,7 +34,7 @@ def _fmt_tps(value: float | None) -> str:
 
 
 class FindingsPanel(Vertical):
-    CSS = """
+    DEFAULT_CSS = """
     FindingsPanel {
         align: center top;
         height: 1fr;
