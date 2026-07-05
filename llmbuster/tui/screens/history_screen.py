@@ -26,12 +26,10 @@ class HistoryPanel(Vertical):
         margin-bottom: 1;
     }
     HistoryPanel #run-select {
-        margin-bottom: 1;
         width: 1fr;
     }
     HistoryPanel #filters {
         height: 3;
-        margin-bottom: 1;
     }
     HistoryPanel #filters Input {
         width: 1fr;
@@ -39,7 +37,6 @@ class HistoryPanel(Vertical):
     }
     HistoryPanel #history-table {
         height: 10;
-        margin-bottom: 1;
     }
     HistoryPanel #detail {
         height: 1fr;
@@ -53,23 +50,26 @@ class HistoryPanel(Vertical):
     HistoryPanel #detail-split {
         height: 1fr;
         width: 1fr;
+        min-width: 1;
     }
     HistoryPanel #detail-request {
         width: 1fr;
         height: 1fr;
+        min-width: 1;
         border: round $panel;
         padding: 0 1;
     }
     HistoryPanel #detail-response {
         width: 1fr;
         height: 1fr;
+        min-width: 1;
         border: round $panel;
         padding: 0 1;
     }
     HistoryPanel #detail-request-content,
     HistoryPanel #detail-response-content {
         width: 1fr;
-        height: 1fr;
+        height: auto;
     }
     """
 
@@ -195,6 +195,7 @@ class HistoryPanel(Vertical):
         verd_filter = self.query_one("#verdict-filter", Input).value.strip().lower()
         table = self.query_one("#history-table", DataTable)
         table.clear()
+        filtered: list[InteractionRecord] = []
         for rec in self._records:
             if cat_filter and cat_filter not in rec.owasp_category.lower():
                 continue
@@ -212,6 +213,10 @@ class HistoryPanel(Vertical):
                 rec.detector_id or "",
                 key=str(rec.id) if rec.id is not None else None,
             )
+            filtered.append(rec)
+        if filtered:
+            table.move_cursor(row=0)
+            self._render_detail(filtered[0])
 
     @on(Input.Changed)
     def _on_filter_changed(self, event: Input.Changed) -> None:
@@ -223,9 +228,15 @@ class HistoryPanel(Vertical):
         if event.input.id in ("category-filter", "verdict-filter"):
             self._apply_filters()
 
+    @on(DataTable.RowHighlighted)
+    def _on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        self._show_row_by_key(event.row_key.value)
+
     @on(DataTable.RowSelected)
     def _on_row_selected(self, event: DataTable.RowSelected) -> None:
-        row_key_value = event.row_key.value
+        self._show_row_by_key(event.row_key.value)
+
+    def _show_row_by_key(self, row_key_value: str | None) -> None:
         if row_key_value is None:
             return
         try:

@@ -180,6 +180,9 @@ async def test_row_select_shows_detail(
         table = panel.query_one("#history-table", DataTable)
         table.focus()
         await pilot.pause()
+        assert "Sent History" in _request_text(panel)
+        assert "Raw Response" in _response_text(panel)
+        assert "vulnerable" in _summary_text(panel)
         await pilot.press("enter")
         await pilot.pause()
         request_text = _request_text(panel)
@@ -197,6 +200,72 @@ async def test_row_select_shows_detail(
         assert "ttft_ms: 12" in response_text
         assert "vulnerable" in summary_text
         assert "canary" in summary_text
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_first_row_auto_highlighted_on_load(
+    seeded_store: tuple[SQLiteStore, int],
+) -> None:
+    store, run_id = seeded_store
+    app = _HarnessApp(HistoryPanel(store, run_id))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.pause()
+        panel = app.query_one(HistoryPanel)
+        assert "Sent History" in _request_text(panel)
+        assert "Raw Request" in _request_text(panel)
+        assert "Raw Response" in _response_text(panel)
+        assert "raw-response-body" in _response_text(panel)
+        assert "vulnerable" in _summary_text(panel)
+        table = panel.query_one("#history-table", DataTable)
+        assert table.cursor_coordinate.row == 0
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_arrow_keys_update_detail(
+    seeded_store: tuple[SQLiteStore, int],
+) -> None:
+    store, run_id = seeded_store
+    app = _HarnessApp(HistoryPanel(store, run_id))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(HistoryPanel)
+        table = panel.query_one("#history-table", DataTable)
+        table.focus()
+        await pilot.pause()
+        assert "vulnerable" in _summary_text(panel)
+        await pilot.press("down")
+        await pilot.pause()
+        assert table.cursor_coordinate.row == 1
+        assert "safe" in _summary_text(panel)
+        assert "verdict: safe" in _response_text(panel)
+        await pilot.press("up")
+        await pilot.pause()
+        assert table.cursor_coordinate.row == 0
+        assert "vulnerable" in _summary_text(panel)
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_response_pane_visible(
+    seeded_store: tuple[SQLiteStore, int],
+) -> None:
+    store, run_id = seeded_store
+    app = _HarnessApp(HistoryPanel(store, run_id))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(HistoryPanel)
+        table = panel.query_one("#history-table", DataTable)
+        table.focus()
+        await pilot.pause()
+        response_pane = panel.query_one("#detail-response", Widget)
+        assert response_pane.outer_size.width > 0
+        assert response_pane.outer_size.height > 0
+        response_text = _response_text(panel)
+        assert "Raw Response" in response_text
+        assert "raw-response-body" in response_text
     store.close()
 
 
