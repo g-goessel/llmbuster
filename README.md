@@ -408,7 +408,7 @@ Apache License 2.0. See [LICENSE](LICENSE).
 - **No telemetry.** The tool makes no outbound connections except to the
   endpoints you configure in a target profile.
 - **Secrets via environment variables only.** Use `${env:VAR}` interpolation;
-  never hardcode keys in profiles, the DB, logs, or reports. Secret values are
-  never logged or surfaced.
+  never hardcode keys in profiles, logs, or reports.
+  > **⚠️ Warning**: The SQLite database (`llmbuster.db`) records exact network requests for replayability and *will* contain sensitive information such as credentials and authentication tokens if they were sent to the target. **Do not share your `.db` file.**
 - **Responsible disclosure.** If a scan reveals a real vulnerability in a
   service you don't own, follow that service's responsible-disclosure process.

@@ -19,6 +19,7 @@ would. Interactions are logged proxy-style into a portable SQLite DB.
 >   connections are to the endpoints *you* declare in a target profile.
 > - **Secrets via environment variables only.** Never hardcode API keys in
 >   profiles; use `${env:VAR}` interpolation (see [Target profiles](profiles.md)).
+>   **Warning:** The generated SQLite database will contain these credentials in plaintext. Do not share your `.db` file.
 >
 > By using this software you confirm that you are testing systems you are
 > authorized to test. The authors accept no liability for misuse.

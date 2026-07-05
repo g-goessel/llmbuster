@@ -638,6 +638,6 @@ artifact exists after **Milestone 5**.
 ## 12. Security & Ethics (non-negotiable)
 
 - Secrets enter **only** via environment variables / `${env:...}`. Never write
-  secrets to profiles, the DB, logs, or reports.
+  secrets to profiles, logs, or reports.
 - The tool must display/ship an **authorized-use-only** disclaimer.
 - Network egress happens **only** to user-configured targets — no telemetry.

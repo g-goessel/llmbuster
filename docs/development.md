@@ -72,10 +72,10 @@ tests/
 ## Secrets policy
 
 - Secrets enter **ONLY** via environment variables using `${env:VAR}`
-  interpolation (see [Target profiles](profiles.md#interpolation-placeholders)).
-- Never commit secrets to profiles, the DB, logs, or reports.
-- Never log or surface secret values. Request JSON is masked before display in
-  the TUI and logs.
+  interpolation in profiles.
+- Never commit secrets to profiles, logs, or reports.
+- **Warning**: The SQLite database (`llmbuster.db`) records exact network requests for replayability and *will* contain sensitive information such as credentials and authentication tokens if they were sent to the target. **Do not share your `.db` file.**
+- Request JSON is masked before display in the TUI to prevent accidental over-the-shoulder leakage.
 
 ## Security & ethics
 

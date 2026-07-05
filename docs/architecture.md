@@ -116,5 +116,5 @@ Bundled `openrouter.yaml` template and the 10 pack YAMLs, accessed via
   detector is already wired.
 - **Data, not code, for payloads.** Packs are YAML; no `eval`. Custom Python
   logic goes through the `plugin` target kind with `importlib`.
-- **Secrets never touch disk.** Secrets enter only via `${env:VAR}` and are
-  masked in logs/TUI/reports. See [Secrets policy](development.md#secrets-policy).
+- **Secrets handling.** Secrets enter only via `${env:VAR}` and are
+  masked in logs/TUI/reports. However, the exact HTTP request is saved to the SQLite database. See [Secrets policy](development.md#secrets-policy).
