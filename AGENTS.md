@@ -22,6 +22,7 @@ self-contained against §3/§4/§5/§6 plus its listed deps.
 - `uv run mypy llmbuster` — type check.
 - `uv run pytest` — tests.
 - `uv run llmbuster --help` — verify entrypoint.
+- `uv run llmbuster tui` — launch the interactive TUI.
 
 ## Package layout
 ```
@@ -30,10 +31,14 @@ llmbuster/
   target/        # T1.x targets, profile engine, interpolation
   payload/       # T2.x loader, mutation
   detector/      # T2.x detectors
-  orchestrator/  # T3.x scanning, repetition, chains
+  orchestrator/  # T3.x scanning, repetition, chains, summary
   store/         # T4.x sqlite + writer task
-  tui/           # T5.x Textual screens
-  cli.py         # Typer entrypoints
+  tui/           # T5.x Textual app + panels
+    app.py       # LlmBusterApp (tabs, content switcher, drainer)
+    screens/     # ConfigPanel, DashboardPanel, HistoryPanel, FindingsPanel
+  cli.py         # Typer entrypoints (targets, scan, selftest, report, tui)
+  selftest.py    # T6.1 self-test engine
+  report.py      # T6.2 report builder (markdown/json)
   resources/     # bundled profiles + seed payload packs
 tests/
 ```
@@ -70,7 +75,8 @@ All three must pass before committing.
 - Validate (ruff + mypy + pytest) before committing.
 - Commit locally only; the user pushes. Do not push.
 - Do not amend or force-push.
-- Commit message format: `T<id>: <summary>`.
+- Commit message format: `T<id>: <summary>` for plan tasks; free-form for
+  fixes and improvements outside the plan.
 
 ## Metric formulas (from §1)
 - `duration_ms` = wall-clock from request send to last token.

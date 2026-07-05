@@ -44,8 +44,9 @@ would. Interactions are logged proxy-style into a portable SQLite DB.
   flags), wired through a small registry.
 - **Reproducibility scoring** — verdicts are rolled up across attempts with a
   reproducibility score, so you can tell a flaky hit from a reliable vuln.
-- **Textual TUI** — config, live dashboard, proxy history browser, and findings
-  summary screens.
+- **Textual TUI** — tabbed interface with config, live dashboard, proxy history
+  browser (split request/response detail view), and findings summary screens.
+  Browse previous runs via a dropdown picker.
 - **Reports** — export a run as Markdown or JSON, to a file or stdout.
 - **Offline & deterministic** — no paid APIs required for `selftest`; tests use
   a mock server and seeded SQLite DBs.
@@ -90,13 +91,14 @@ would. Interactions are logged proxy-style into a portable SQLite DB.
 ```
 
 - **CLI** (`llmbuster/cli.py`) — Typer app exposing `targets` (init/test/list),
-  `scan run`, `selftest`, and `report`.
-- **TUI** (`llmbuster/tui/`) — Textual app with four screens: **config**
-  (target/system-prompt/concurrency/repeat/categories/escalate),
-  **dashboard** (live progress bar + per-category table + TTFT/TPS counters),
-  **history** (proxy-grade interaction table with filters and a row detail
-  view), and **findings** (per-category aggregates + per-payload
-  reproducibility + run stats).
+  `scan run`, `selftest`, `report`, and `tui`.
+- **TUI** (`llmbuster/tui/`) — Textual app with a tabbed `MainScreen` containing
+  four panels: **config** (target/system-prompt/concurrency/repeat/categories/
+  escalate with a multi-select OWASP category list), **dashboard** (live progress
+  bar + per-category table + TTFT/TPS counters), **history** (proxy-grade
+  interaction table with run picker, category/verdict filters, and a split
+  request/response detail view that updates on arrow-key navigation), and
+  **findings** (per-category aggregates + per-payload reproducibility + run stats).
 - **Orchestrator** (`llmbuster/orchestrator/`) — `ScanOrchestrator` runs an
   asyncio event loop with a concurrency semaphore, emits progress events,
   drives escalation chains on vulnerable payloads, and persists results
@@ -112,7 +114,8 @@ would. Interactions are logged proxy-style into a portable SQLite DB.
   (32 payloads) shipped under `llmbuster/resources/packs/`.
 - **Detectors** (`llmbuster/detector/`) — `CanaryDetector` (matches an exact
   token in the reply) and `RegexDetector` (regex + flags), exposed through a
-  small registry.
+  small registry. All bundled packs use `CanaryDetector` to avoid false
+  positives from refusal phrases.
 - **Store** (`llmbuster/store/`) — `SQLiteStore` (WAL mode, `foreign_keys=ON`,
   the §3 proxy schema) and `WriterTask`, a single-consumer async task that
   drains the interaction queue and persists serially.
@@ -202,18 +205,25 @@ uv run llmbuster scan run openrouter.yaml \
 
 uv run llmbuster report <run_id> --format markdown --out report.md
 uv run llmbuster report <run_id> --format json     # to stdout
+
+# 5) Or explore results interactively in the TUI.
+uv run llmbuster tui
+# Tabs: 1=Config, 2=Dashboard, 3=History, 4=Findings. q=quit.
+# History tab: pick a run from the dropdown, arrow-key through interactions,
+# request/response detail updates live.
 ```
 
 ## CLI reference
 
 | Command                              | Description                                                         |
 | ------------------------------------ | ------------------------------------------------------------------- |
-| `llmbuster selftest`                 | Validate bundled packs + run detector sanity checks (no API calls). |
-| `llmbuster targets init [PATH]`     | Write a commented example profile (`--force` to overwrite).        |
-| `llmbuster targets test <PROFILE>`  | Send one message, print request/response/metrics + captures.       |
+| `llmbuster tui`                     | Launch the interactive terminal UI (tabs, run picker, detail view). |
+| `llmbuster selftest`                | Validate bundled packs + run detector sanity checks (no API calls). |
+| `llmbuster targets init [PATH]`     | Write a commented example profile (`--force` to overwrite).          |
+| `llmbuster targets test <PROFILE>`  | Send one message, print request/response/metrics + captures.        |
 | `llmbuster targets list`            | List bundled profiles.                                              |
 | `llmbuster scan run <PROFILE>`      | Run a scan (see options below).                                     |
-| `llmbuster report <RUN_ID>`         | Export a run as Markdown or JSON.                                  |
+| `llmbuster report <RUN_ID>`         | Export a run as Markdown or JSON.                                   |
 
 ### `scan run` options
 
@@ -233,6 +243,12 @@ uv run llmbuster report <run_id> --format json     # to stdout
 | `--db PATH`       | SQLite DB path (default `./llmbuster.db`).              |
 | `--format markdown\|json` | Output format (default `markdown`).             |
 | `--out PATH`      | Write to a file (default: stdout).                      |
+
+### `tui` options
+
+| Option     | Description                                          |
+| ---------- | ---------------------------------------------------- |
+| `--db PATH`| SQLite DB path (default `./llmbuster.db`).          |
 
 ## Target profiles
 
@@ -331,16 +347,14 @@ payloads:
     detectors:
       - type: canary
         token: "PWNED"
-      - type: regex
-        pattern: 'system|instruction'
-        flags: "IGNORECASE"
     mutations: [base64, leetspeak]   # optional
     escalation_to: llm01-extract-system-prompt   # optional
 ```
 
 - `category` — one of `LLM01`–`LLM10`.
 - `payloads[].detectors` — list of `canary` (exact token) or `regex`
-  (with optional `flags`) detectors.
+  (with optional `flags`) detectors. All bundled packs use `canary` to avoid
+  false positives from refusal phrases matching regex keywords.
 - `payloads[].mutations` — optional list of `base64`, `leetspeak`,
   `unicode_homoglyph`. Each mutation produces an additional attempt whose
   reply is checked against the same detectors.
@@ -371,7 +385,7 @@ Division-by-zero guard: if `duration_ms <= ttft_ms`, `tps` is set to `None`.
 uv sync                       # install deps (including the dev group)
 uv run ruff check             # lint
 uv run mypy llmbuster         # type check (strict)
-uv run pytest                 # test suite (313 tests, offline + deterministic)
+uv run pytest                 # test suite (333 tests, offline + deterministic)
 uv run llmbuster --help       # verify the entrypoint
 ```
 
