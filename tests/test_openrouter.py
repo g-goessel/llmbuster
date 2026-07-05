@@ -99,8 +99,9 @@ def test_build_profile_bakes_model_into_body() -> None:
     assert "__MODEL__" not in config.request.body
     assert "openai/gpt-4o" in config.request.body
     assert "${messages_json}" in config.request.body
-    assert config.response.type.value == "json"
-    assert config.response.reply_path == "$.choices[0].message.content"
+    assert '"stream": true' in config.request.body
+    assert config.response.type.value == "sse"
+    assert config.response.reply_path is None
     assert config.session.mode.value == "stateless"
 
 
@@ -121,13 +122,14 @@ def test_build_target_returns_profile_target() -> None:
 async def test_build_target_sends_correct_model_in_request(
     httpx_mock: HTTPXMock,
 ) -> None:
+    sse_body = (
+        b'data: {"choices":[{"delta":{"content":"hello from gpt-4o"}}]}\n\n'
+        b"data: [DONE]\n\n"
+    )
     httpx_mock.add_response(
         url="https://openrouter.ai/api/v1/chat/completions",
-        json={
-            "choices": [
-                {"message": {"role": "assistant", "content": "hello from gpt-4o"}}
-            ]
-        },
+        content=sse_body,
+        headers={"content-type": "text/event-stream"},
     )
     target = build_target("openai/gpt-4o")
     history = ChatHistory(messages=[Message(role=Role.USER, content="hi")])
@@ -136,4 +138,5 @@ async def test_build_target_sends_correct_model_in_request(
     request = json.loads(response.raw_request_json)
     body = json.loads(request["body"])
     assert body["model"] == "openai/gpt-4o"
+    assert body["stream"] is True
     assert body["messages"] == [{"role": "user", "content": "hi"}]

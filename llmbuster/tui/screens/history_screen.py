@@ -23,20 +23,23 @@ class HistoryPanel(Vertical):
     HistoryPanel #title {
         text-align: center;
         text-style: bold;
-        margin-bottom: 1;
+        margin: 0;
     }
     HistoryPanel #run-select {
         width: 1fr;
+        margin: 0;
     }
     HistoryPanel #filters {
         height: 3;
+        margin: 0;
     }
     HistoryPanel #filters Input {
         width: 1fr;
-        margin-right: 1;
+        margin: 0;
     }
     HistoryPanel #history-table {
-        height: 10;
+        height: 12;
+        margin: 0;
     }
     HistoryPanel #detail {
         height: 1fr;

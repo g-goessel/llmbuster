@@ -274,9 +274,10 @@ model: "openai/gpt-oss-20b:free"
 ```
 
 The OpenRouter key is read from the `OPENROUTER_API_KEY` environment variable.
-The built-in adapter sends `"reasoning": {"exclude": true}` to hide
-reasoning/thinking tokens from the response; detectors only evaluate
-`$.choices[0].message.content`, so reasoning data is never used for detection.
+The built-in adapter streams responses over SSE (`"stream": true`) and sends
+`"reasoning": {"exclude": true}` to hide reasoning/thinking tokens from the
+response; detectors only evaluate the accumulated `choices[0].delta.content`
+tokens, so reasoning data is never used for detection.
 
 ### Minimal `profile` (declarative HTTP)
 

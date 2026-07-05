@@ -8,11 +8,10 @@ request:
     Content-Type: "application/json"
     Authorization: "Bearer ${env:OPENROUTER_API_KEY}"
   body: |
-    {"model": "__MODEL__", "messages": ${messages_json}, "reasoning": {"exclude": true}}
+    {"model": "__MODEL__", "messages": ${messages_json}, "stream": true, "reasoning": {"exclude": true}}
 
 response:
-  type: json
-  reply_path: "$.choices[0].message.content"
+  type: sse
 
 session:
   mode: stateless
