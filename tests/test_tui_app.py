@@ -15,13 +15,10 @@ from llmbuster.domain.models import (
 )
 from llmbuster.orchestrator import ProgressEvent, ScanConfig, ScanOrchestrator
 from llmbuster.tui import LlmBusterApp
-from llmbuster.tui.screens import (
-    ConfigPanel,
-    DashboardPanel,
-    FindingsPanel,
-    HistoryPanel,
-    MainScreen,
-)
+from llmbuster.tui.screens.config_screen import ConfigPanel
+from llmbuster.tui.screens.dashboard_screen import DashboardPanel
+from llmbuster.tui.screens.findings_screen import FindingsPanel
+from llmbuster.tui.screens.history_screen import HistoryPanel
 
 
 def _payload(pid: str = "p1", prompt: str = "hi") -> Payload:
@@ -73,8 +70,7 @@ async def test_app_boots_and_quits(tmp_path: Path) -> None:
     app = _app(tmp_path)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert isinstance(app.screen, MainScreen)
-        assert app.screen.query_one("#nav-tabs", Tabs).active == "tab-config"
+        assert app.query_one("#nav-tabs", Tabs).active == "tab-config"
     assert app.is_running is False
 
 
@@ -83,9 +79,7 @@ async def test_tabs_display_all_sections(tmp_path: Path) -> None:
     app = _app(tmp_path)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, MainScreen)
-        tabs = screen.query_one("#nav-tabs", Tabs)
+        tabs = app.query_one("#nav-tabs", Tabs)
         labels = [str(tab.label) for tab in tabs.query(Tab)]
         assert labels == ["Config", "Dashboard", "History", "Findings"]
         tab_ids = [tab.id for tab in tabs.query(Tab)]
@@ -97,10 +91,8 @@ async def test_navigation_between_tabs(tmp_path: Path) -> None:
     app = _app(tmp_path)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, MainScreen)
-        tabs = screen.query_one("#nav-tabs", Tabs)
-        switcher = screen.query_one("#content", ContentSwitcher)
+        tabs = app.query_one("#nav-tabs", Tabs)
+        switcher = app.query_one("#content", ContentSwitcher)
         assert tabs.active == "tab-config"
         assert switcher.current == "config-panel"
 
@@ -134,12 +126,10 @@ async def test_all_panels_mounted(tmp_path: Path) -> None:
     app = _app(tmp_path)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, MainScreen)
-        assert screen.query_one("#config-panel", ConfigPanel) is not None
-        assert screen.query_one("#dashboard-panel", DashboardPanel) is not None
-        assert screen.query_one("#history-panel", HistoryPanel) is not None
-        assert screen.query_one("#findings-panel", FindingsPanel) is not None
+        assert app.query_one("#config-panel", ConfigPanel) is not None
+        assert app.query_one("#dashboard-panel", DashboardPanel) is not None
+        assert app.query_one("#history-panel", HistoryPanel) is not None
+        assert app.query_one("#findings-panel", FindingsPanel) is not None
 
 
 @pytest.mark.asyncio
@@ -221,9 +211,7 @@ async def test_drain_forwards_to_dashboard_panel(tmp_path: Path) -> None:
     app = _app(tmp_path)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, MainScreen)
-        panel = screen.query_one("#dashboard-panel", DashboardPanel)
+        panel = app.query_one("#dashboard-panel", DashboardPanel)
         orchestrator = _orchestrator()
         app.attach_orchestrator(orchestrator)
         await orchestrator.progress_queue.put(_progress_event("p1", Verdict.VULNERABLE))

@@ -125,6 +125,7 @@ class HistoryPanel(Vertical):
 
     def on_mount(self) -> None:
         table = self.query_one("#history-table", DataTable)
+        table.styles.height = 10
         table.add_column("id", key="id")
         table.add_column("Category", key="category")
         table.add_column("Payload", key="payload")

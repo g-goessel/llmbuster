@@ -7,13 +7,18 @@ from pathlib import Path
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.events import Unmount
-from textual.widgets import Footer, Header
+from textual.widgets import ContentSwitcher, Footer, Header, Tab, Tabs
 
 from llmbuster.orchestrator import ProgressEvent, ScanOrchestrator
 from llmbuster.store.sqlite_store import SQLiteStore
 from llmbuster.tui.screens import (
-    MainScreen,
+    ConfigPanel,
+    DashboardPanel,
+    FindingsPanel,
+    HistoryPanel,
     ScanConfigResult,
     ScanConfigSubmitted,
 )
@@ -23,10 +28,15 @@ class LlmBusterApp(App[None]):
     TITLE = "llmbuster"
 
     CSS = """
-    #msg {
-        padding: 1 2;
-        border: round $panel;
-        text-align: center;
+    #main-container {
+        layout: vertical;
+        height: 1fr;
+    }
+    #nav-tabs {
+        height: 3;
+    }
+    #content {
+        height: 1fr;
     }
     """
 
@@ -46,16 +56,28 @@ class LlmBusterApp(App[None]):
         self._orchestrator: ScanOrchestrator | None = None
         self._drainer: asyncio.Task[None] | None = None
         self.progress_events: list[ProgressEvent] = []
-        self._store: SQLiteStore | None = None
+        self._store: SQLiteStore = SQLiteStore(db_path)
         self.last_config: ScanConfigResult | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Vertical(id="main-container"):
+            yield Tabs(
+                Tab("Config", id="tab-config"),
+                Tab("Dashboard", id="tab-dashboard"),
+                Tab("History", id="tab-history"),
+                Tab("Findings", id="tab-findings"),
+                id="nav-tabs",
+                active="tab-config",
+            )
+            with ContentSwitcher(id="content", initial="config-panel"):
+                yield ConfigPanel(id="config-panel")
+                yield DashboardPanel(id="dashboard-panel")
+                yield HistoryPanel(self._store, id="history-panel")
+                yield FindingsPanel(self._store, id="findings-panel")
         yield Footer()
 
     async def on_mount(self) -> None:
-        self._store = SQLiteStore(self.db_path)
-        self.push_screen(MainScreen(self._store))
         self._maybe_start_drainer()
 
     def attach_orchestrator(self, orchestrator: ScanOrchestrator) -> None:
@@ -81,17 +103,27 @@ class LlmBusterApp(App[None]):
                 if event is None:
                     break
                 self.progress_events.append(event)
-                screen = self.screen
-                if isinstance(screen, MainScreen):
-                    panel = screen.get_dashboard()
-                    if panel is not None:
-                        panel.handle_event(event)
+                try:
+                    panel = self.query_one("#dashboard-panel", DashboardPanel)
+                except NoMatches:
+                    panel = None
+                if panel is not None:
+                    panel.handle_event(event)
         except asyncio.CancelledError:
             raise
 
     @on(ScanConfigSubmitted)
     def _on_scan_config_submitted(self, event: ScanConfigSubmitted) -> None:
         self.last_config = event.result
+
+    @on(Tabs.TabActivated)
+    def _on_tab_activated(self, event: Tabs.TabActivated) -> None:
+        tab = event.tab
+        if tab.id is None:
+            return
+        name = tab.id.removeprefix("tab-")
+        with contextlib.suppress(NoMatches):
+            self.query_one("#content", ContentSwitcher).current = f"{name}-panel"
 
     @on(Unmount)
     async def on_unmount(self) -> None:
@@ -103,7 +135,6 @@ class LlmBusterApp(App[None]):
         self._drainer = None
         if self._store is not None:
             self._store.close()
-            self._store = None
 
     def action_go_config(self) -> None:
         self._activate_tab("tab-config")
@@ -118,7 +149,5 @@ class LlmBusterApp(App[None]):
         self._activate_tab("tab-findings")
 
     def _activate_tab(self, tab_id: str) -> None:
-        screen = self.screen
-        if isinstance(screen, MainScreen):
-            screen.activate_tab(tab_id)
-
+        with contextlib.suppress(NoMatches):
+            self.query_one("#nav-tabs", Tabs).active = tab_id

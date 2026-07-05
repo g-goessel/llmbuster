@@ -9,7 +9,7 @@ from textual.widgets import DataTable, ProgressBar, Static
 from llmbuster.domain.models import Metrics, OwaspCategory, Payload, Verdict
 from llmbuster.orchestrator import ProgressEvent, ScanConfig, ScanOrchestrator
 from llmbuster.tui import LlmBusterApp
-from llmbuster.tui.screens import DashboardPanel, MainScreen
+from llmbuster.tui.screens.dashboard_screen import DashboardPanel
 
 
 def _event(
@@ -180,9 +180,7 @@ async def test_via_app_drain_forwards_to_dashboard(tmp_path: Path) -> None:
     app = LlmBusterApp(db_path=tmp_path / "dash.db")
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, MainScreen)
-        panel = screen.query_one("#dashboard-panel", DashboardPanel)
+        panel = app.query_one("#dashboard-panel", DashboardPanel)
         orchestrator = _orchestrator()
         app.attach_orchestrator(orchestrator)
         await orchestrator.progress_queue.put(
@@ -231,7 +229,6 @@ async def test_drain_collects_when_screen_not_main(tmp_path: Path) -> None:
     app = LlmBusterApp(db_path=tmp_path / "dash.db")
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        assert isinstance(app.screen, MainScreen)
         from textual.screen import Screen
 
         other = Screen()

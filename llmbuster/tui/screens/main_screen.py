@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from textual import on
 from textual.app import ComposeResult
+from textual.containers import Vertical
 from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import ContentSwitcher, Tab, Tabs
@@ -23,11 +24,18 @@ class MainScreen(Screen[None]):
     MainScreen {
         layout: vertical;
     }
+    #main-container {
+        width: 1fr;
+        height: 1fr;
+        layout: vertical;
+    }
     #nav-tabs {
         height: 3;
+        width: 1fr;
     }
     #content {
         height: 1fr;
+        width: 1fr;
     }
     """
 
@@ -36,19 +44,20 @@ class MainScreen(Screen[None]):
         self._store = store
 
     def compose(self) -> ComposeResult:
-        yield Tabs(
-            Tab("Config", id="tab-config"),
-            Tab("Dashboard", id="tab-dashboard"),
-            Tab("History", id="tab-history"),
-            Tab("Findings", id="tab-findings"),
-            id="nav-tabs",
-            active="tab-config",
-        )
-        with ContentSwitcher(id="content", initial="config-panel"):
-            yield ConfigPanel(id="config-panel")
-            yield DashboardPanel(id="dashboard-panel")
-            yield HistoryPanel(self._store, id="history-panel")
-            yield FindingsPanel(self._store, id="findings-panel")
+        with Vertical(id="main-container"):
+            yield Tabs(
+                Tab("Config", id="tab-config"),
+                Tab("Dashboard", id="tab-dashboard"),
+                Tab("History", id="tab-history"),
+                Tab("Findings", id="tab-findings"),
+                id="nav-tabs",
+                active="tab-config",
+            )
+            with ContentSwitcher(id="content", initial="config-panel"):
+                yield ConfigPanel(id="config-panel")
+                yield DashboardPanel(id="dashboard-panel")
+                yield HistoryPanel(self._store, id="history-panel")
+                yield FindingsPanel(self._store, id="findings-panel")
 
     @on(Tabs.TabActivated)
     def _on_tab_activated(self, event: Tabs.TabActivated) -> None:
