@@ -13,6 +13,7 @@ from llmbuster.payload.mutation import (
     mutate,
     mutate_base64,
     mutate_leetspeak,
+    mutate_translation,
     mutate_unicode_homoglyph,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     "mutate",
     "mutate_base64",
     "mutate_leetspeak",
+    "mutate_translation",
     "mutate_unicode_homoglyph",
     "validate_payloads",
 ]

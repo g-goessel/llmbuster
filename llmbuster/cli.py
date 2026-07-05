@@ -24,6 +24,7 @@ from llmbuster.target.factory import (
 )
 from llmbuster.target.openrouter import build_target
 from llmbuster.tui import LlmBusterApp
+from llmbuster.utils import mask_request_json
 
 app = typer.Typer(
     name="llmbuster",
@@ -90,11 +91,7 @@ def targets_test(
     typer.echo(f"kind: {loaded.kind.value}")
     typer.echo(f"name: {loaded.name}")
     typer.echo("--- request ---")
-    try:
-        request_obj = json.loads(response.raw_request_json)
-        typer.echo(json.dumps(request_obj, indent=2, ensure_ascii=False))
-    except (json.JSONDecodeError, ValueError):
-        typer.echo(response.raw_request_json)
+    typer.echo(mask_request_json(response.raw_request_json))
     typer.echo("--- response ---")
     typer.echo(response.raw_response_text if response.raw_response_text is not None else "")
     typer.echo("--- reply ---")

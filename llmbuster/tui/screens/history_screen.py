@@ -9,6 +9,7 @@ from textual.widgets import DataTable, Input, Select, Static
 from textual.widgets._select import NoSelection
 
 from llmbuster.store.sqlite_store import InteractionRecord, SQLiteStore
+from llmbuster.utils import mask_request_json
 
 _MAX_RESPONSE_CHARS = 4000
 
@@ -324,11 +325,7 @@ class HistoryPanel(Vertical):
 
     def _format_raw_request(self, rec: InteractionRecord) -> str:
         lines = ["=== Raw Request ==="]
-        try:
-            parsed = json.loads(rec.raw_request_json)
-            lines.append(json.dumps(parsed, indent=2, ensure_ascii=False))
-        except (json.JSONDecodeError, TypeError):
-            lines.append(rec.raw_request_json)
+        lines.append(mask_request_json(rec.raw_request_json))
         return "\n".join(lines)
 
     def _format_raw_response(self, rec: InteractionRecord) -> str:
