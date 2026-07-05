@@ -16,8 +16,9 @@ _MAX_RESPONSE_CHARS = 4000
 class HistoryPanel(Vertical):
     CSS = """
     HistoryPanel {
-        align: center top;
+        layout: vertical;
         height: 1fr;
+        width: 1fr;
     }
     HistoryPanel #title {
         text-align: center;
@@ -37,11 +38,12 @@ class HistoryPanel(Vertical):
         margin-right: 1;
     }
     HistoryPanel #history-table {
-        height: 12;
+        height: 10;
         margin-bottom: 1;
     }
     HistoryPanel #detail {
         height: 1fr;
+        width: 1fr;
     }
     HistoryPanel #detail-summary {
         height: 1;
@@ -50,6 +52,7 @@ class HistoryPanel(Vertical):
     }
     HistoryPanel #detail-split {
         height: 1fr;
+        width: 1fr;
     }
     HistoryPanel #detail-request {
         width: 1fr;
@@ -65,6 +68,7 @@ class HistoryPanel(Vertical):
     }
     HistoryPanel #detail-request-content,
     HistoryPanel #detail-response-content {
+        width: 1fr;
         height: 1fr;
     }
     """
