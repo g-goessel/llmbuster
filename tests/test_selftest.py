@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -7,6 +8,10 @@ from typer.testing import CliRunner
 from llmbuster.cli import app
 from llmbuster.payload.bundled import load_bundled_packs
 from llmbuster.selftest import run_selftest
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 runner = CliRunner()
 
@@ -61,4 +66,4 @@ def test_selftest_cli_exits_one_when_broken(tmp_path: Path) -> None:
 def test_selftest_cli_help_lists_pack_option() -> None:
     result = runner.invoke(app, ["selftest", "--help"])
     assert result.exit_code == 0
-    assert "--pack" in result.output
+    assert "--pack" in _strip_ansi(result.output)
