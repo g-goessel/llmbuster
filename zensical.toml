@@ -6,10 +6,6 @@ description = "A terminal-based (TUI) security scanner for assessing LLM impleme
 [project.urls]
 "GitHub" = "https://github.com/g-goessel/llmbuster"
 
-[project.copyright]
-from = 2025
-by = "g-goessel"
-
 [project.license]
 type = "Apache License 2.0"
 url = "https://www.apache.org/licenses/LICENSE-2.0"
