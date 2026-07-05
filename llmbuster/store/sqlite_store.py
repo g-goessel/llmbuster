@@ -273,6 +273,13 @@ class SQLiteStore:
             return None
         return self._row_to_run(row)
 
+    def list_runs(self) -> list[RunRecord]:
+        cur = self._conn.cursor()
+        cur.execute("SELECT * FROM runs ORDER BY id DESC")
+        rows: list[sqlite3.Row] = cur.fetchall()
+        cur.close()
+        return [self._row_to_run(r) for r in rows]
+
     def _row_to_interaction(self, row: sqlite3.Row) -> InteractionRecord:
         return InteractionRecord(
             id=row["id"],

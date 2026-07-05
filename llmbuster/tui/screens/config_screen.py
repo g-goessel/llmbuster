@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalScroll
-from textual.screen import Screen
-from textual.widgets import Button, Input, Label, Static, Switch, TextArea
+from textual.containers import Vertical, VerticalScroll
+from textual.message import Message
+from textual.widgets import Button, Input, Label, SelectionList, Static, Switch, TextArea
+from textual.widgets.selection_list import Selection
 
 from llmbuster.domain.models import OwaspCategory
 from llmbuster.target.factory import LoadedTarget, TargetLoadError, load_target
@@ -22,33 +22,44 @@ class ScanConfigResult:
     escalate: bool
 
 
-class ConfigScreen(Screen[ScanConfigResult | None]):
-    AUTO_FOCUS: ClassVar[str | None] = None
+class ScanConfigSubmitted(Message):
+    """Posted by the config panel when the user starts a scan."""
 
+    def __init__(self, result: ScanConfigResult) -> None:
+        super().__init__()
+        self.result = result
+
+
+class ConfigPanel(Vertical):
     CSS = """
-    ConfigScreen > VerticalScroll {
+    ConfigPanel {
+        height: 1fr;
+    }
+    ConfigPanel > VerticalScroll {
         width: 80;
         max-width: 90%;
+        height: 1fr;
         padding: 1 2;
     }
-    ConfigScreen #title {
+    ConfigPanel #title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    ConfigScreen Label {
+    ConfigPanel Label {
         margin-top: 1;
     }
-    ConfigScreen #system-prompt {
+    ConfigPanel #system-prompt {
         height: 5;
     }
-    ConfigScreen #status {
+    ConfigPanel #status {
         margin-top: 1;
         color: $warning;
     }
-    ConfigScreen Horizontal {
-        height: 3;
-        padding: 1 0;
+    ConfigPanel #categories {
+        height: auto;
+        max-height: 12;
+        margin-bottom: 1;
     }
     """
 
@@ -65,11 +76,19 @@ class ConfigScreen(Screen[ScanConfigResult | None]):
             yield Input(value="5", id="concurrency")
             yield Label("Repeat count (optional, blank = payload defaults):")
             yield Input(value="", id="repeat")
-            yield Label("Categories (comma-separated, e.g. LLM01,LLM06; blank = all):")
-            yield Input(value="", id="categories")
-            with Horizontal():
-                yield Label("Escalate:")
-                yield Switch(id="escalate")
+            yield Label("Categories (leave all unchecked = all OWASP categories):")
+            yield SelectionList[str](
+                *(
+                    Selection(prompt=cat.value, value=cat.value, id=cat.value)
+                    for cat in OwaspCategory
+                ),
+                id="categories",
+            )
+            yield Label(
+                "Escalate (enable escalation chains for vulnerable payloads):",
+                id="escalate-label",
+            )
+            yield Switch(id="escalate")
             yield Button("Test load", id="test-load")
             yield Button("Start Scan", id="submit", variant="primary")
             yield Static("", id="status")
@@ -131,17 +150,8 @@ class ConfigScreen(Screen[ScanConfigResult | None]):
                 self._set_status("Repeat count must be >= 1.")
                 return
 
-        categories_text = self.query_one("#categories", Input).value.strip()
-        categories: list[str] | None = None
-        if categories_text != "":
-            parts = [c.strip().upper() for c in categories_text.split(",") if c.strip()]
-            for part in parts:
-                try:
-                    OwaspCategory(part)
-                except ValueError:
-                    self._set_status(f"Unknown OWASP category: {part}")
-                    return
-            categories = parts or None
+        selected = self.query_one("#categories", SelectionList).selected
+        categories: list[str] | None = sorted(selected) if selected else None
 
         system_text = self.query_one("#system-prompt", TextArea).text
         system_prompt = system_text.strip() or None
@@ -149,13 +159,15 @@ class ConfigScreen(Screen[ScanConfigResult | None]):
         escalate = self.query_one("#escalate", Switch).value
 
         self._set_status("Configuration ready — starting scan.")
-        self.dismiss(
-            ScanConfigResult(
-                loaded_target=loaded,
-                system_prompt=system_prompt,
-                concurrency=concurrency,
-                repeat=repeat,
-                categories=categories,
-                escalate=escalate,
+        self.post_message(
+            ScanConfigSubmitted(
+                ScanConfigResult(
+                    loaded_target=loaded,
+                    system_prompt=system_prompt,
+                    concurrency=concurrency,
+                    repeat=repeat,
+                    categories=categories,
+                    escalate=escalate,
+                )
             )
         )

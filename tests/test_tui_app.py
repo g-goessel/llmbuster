@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+from textual.widgets import ContentSwitcher, HelpPanel, Tab, Tabs
 
 from llmbuster.domain.models import (
     ChatHistory,
@@ -13,10 +16,11 @@ from llmbuster.domain.models import (
 from llmbuster.orchestrator import ProgressEvent, ScanConfig, ScanOrchestrator
 from llmbuster.tui import LlmBusterApp
 from llmbuster.tui.screens import (
-    ConfigScreen,
-    DashboardScreen,
-    FindingsScreen,
-    HistoryScreen,
+    ConfigPanel,
+    DashboardPanel,
+    FindingsPanel,
+    HistoryPanel,
+    MainScreen,
 )
 
 
@@ -60,37 +64,87 @@ def _orchestrator() -> ScanOrchestrator:
     )
 
 
+def _app(tmp_path: Path) -> LlmBusterApp:
+    return LlmBusterApp(db_path=tmp_path / "tui.db")
+
+
 @pytest.mark.asyncio
-async def test_app_boots_and_quits() -> None:
-    app = LlmBusterApp()
+async def test_app_boots_and_quits(tmp_path: Path) -> None:
+    app = _app(tmp_path)
     async with app.run_test() as pilot:
-        assert isinstance(app.screen, ConfigScreen)
         await pilot.pause()
+        assert isinstance(app.screen, MainScreen)
+        assert app.screen.query_one("#nav-tabs", Tabs).active == "tab-config"
     assert app.is_running is False
 
 
 @pytest.mark.asyncio
-async def test_navigation_between_screens() -> None:
-    app = LlmBusterApp()
-    async with app.run_test() as pilot:
-        assert isinstance(app.screen, ConfigScreen)
-
-        await pilot.press("2")
-        assert isinstance(app.screen, DashboardScreen)
-
-        await pilot.press("3")
-        assert isinstance(app.screen, HistoryScreen)
-
-        await pilot.press("4")
-        assert isinstance(app.screen, FindingsScreen)
-
-        await pilot.press("1")
-        assert isinstance(app.screen, ConfigScreen)
+async def test_tabs_display_all_sections(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, MainScreen)
+        tabs = screen.query_one("#nav-tabs", Tabs)
+        labels = [str(tab.label) for tab in tabs.query(Tab)]
+        assert labels == ["Config", "Dashboard", "History", "Findings"]
+        tab_ids = [tab.id for tab in tabs.query(Tab)]
+        assert tab_ids == ["tab-config", "tab-dashboard", "tab-history", "tab-findings"]
 
 
 @pytest.mark.asyncio
-async def test_quit_binding() -> None:
-    app = LlmBusterApp()
+async def test_navigation_between_tabs(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, MainScreen)
+        tabs = screen.query_one("#nav-tabs", Tabs)
+        switcher = screen.query_one("#content", ContentSwitcher)
+        assert tabs.active == "tab-config"
+        assert switcher.current == "config-panel"
+
+        await pilot.press("2")
+        await pilot.pause()
+        assert tabs.active == "tab-dashboard"
+        assert switcher.current == "dashboard-panel"
+        assert isinstance(switcher.visible_content, DashboardPanel)
+
+        await pilot.press("3")
+        await pilot.pause()
+        assert tabs.active == "tab-history"
+        assert switcher.current == "history-panel"
+        assert isinstance(switcher.visible_content, HistoryPanel)
+
+        await pilot.press("4")
+        await pilot.pause()
+        assert tabs.active == "tab-findings"
+        assert switcher.current == "findings-panel"
+        assert isinstance(switcher.visible_content, FindingsPanel)
+
+        await pilot.press("1")
+        await pilot.pause()
+        assert tabs.active == "tab-config"
+        assert switcher.current == "config-panel"
+        assert isinstance(switcher.visible_content, ConfigPanel)
+
+
+@pytest.mark.asyncio
+async def test_all_panels_mounted(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, MainScreen)
+        assert screen.query_one("#config-panel", ConfigPanel) is not None
+        assert screen.query_one("#dashboard-panel", DashboardPanel) is not None
+        assert screen.query_one("#history-panel", HistoryPanel) is not None
+        assert screen.query_one("#findings-panel", FindingsPanel) is not None
+
+
+@pytest.mark.asyncio
+async def test_quit_binding(tmp_path: Path) -> None:
+    app = _app(tmp_path)
     async with app.run_test() as pilot:
         await pilot.press("q")
         await pilot.pause()
@@ -98,8 +152,8 @@ async def test_quit_binding() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ctrl_c_quits() -> None:
-    app = LlmBusterApp()
+async def test_ctrl_c_quits(tmp_path: Path) -> None:
+    app = _app(tmp_path)
     async with app.run_test() as pilot:
         await pilot.press("ctrl+c")
         await pilot.pause()
@@ -107,10 +161,8 @@ async def test_ctrl_c_quits() -> None:
 
 
 @pytest.mark.asyncio
-async def test_help_panel_binding() -> None:
-    from textual.widgets import HelpPanel
-
-    app = LlmBusterApp()
+async def test_help_panel_binding(tmp_path: Path) -> None:
+    app = _app(tmp_path)
     async with app.run_test() as pilot:
         await pilot.press("?")
         await pilot.pause()
@@ -118,9 +170,10 @@ async def test_help_panel_binding() -> None:
 
 
 @pytest.mark.asyncio
-async def test_attach_orchestrator_collects_events() -> None:
-    app = LlmBusterApp()
-    async with app.run_test() as pilot:
+async def test_attach_orchestrator_collects_events(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
         orchestrator = _orchestrator()
         app.attach_orchestrator(orchestrator)
         await orchestrator.progress_queue.put(_progress_event("p1", Verdict.SAFE))
@@ -135,9 +188,10 @@ async def test_attach_orchestrator_collects_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_teardown_cancels_drainer() -> None:
-    app = LlmBusterApp()
-    async with app.run_test() as pilot:
+async def test_clean_teardown_cancels_drainer(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
         app.attach_orchestrator(_orchestrator())
         await pilot.pause()
         assert app._drainer is not None
@@ -146,15 +200,35 @@ async def test_clean_teardown_cancels_drainer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_attach_before_mount_starts_drainer() -> None:
-    app = LlmBusterApp()
+async def test_attach_before_mount_starts_drainer(tmp_path: Path) -> None:
+    app = _app(tmp_path)
     orchestrator = _orchestrator()
     app.attach_orchestrator(orchestrator)
     assert app._drainer is None
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         assert app._drainer is not None
         assert not app._drainer.done()
         await orchestrator.progress_queue.put(None)
         await pilot.pause()
         assert app._drainer.done()
+
+
+@pytest.mark.asyncio
+async def test_drain_forwards_to_dashboard_panel(tmp_path: Path) -> None:
+    from textual.widgets import Static
+
+    app = _app(tmp_path)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, MainScreen)
+        panel = screen.query_one("#dashboard-panel", DashboardPanel)
+        orchestrator = _orchestrator()
+        app.attach_orchestrator(orchestrator)
+        await orchestrator.progress_queue.put(_progress_event("p1", Verdict.VULNERABLE))
+        await orchestrator.progress_queue.put(None)
+        await pilot.pause()
+        assert app._drainer is not None
+        await app._drainer
+        assert str(panel.query_one("#findings", Static).content) == "1"

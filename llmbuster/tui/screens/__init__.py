@@ -1,12 +1,15 @@
-from llmbuster.tui.screens.config_screen import ConfigScreen, ScanConfigResult
-from llmbuster.tui.screens.dashboard_screen import DashboardScreen
-from llmbuster.tui.screens.findings_screen import FindingsScreen
-from llmbuster.tui.screens.history_screen import HistoryScreen
+from llmbuster.tui.screens.config_screen import ConfigPanel, ScanConfigResult, ScanConfigSubmitted
+from llmbuster.tui.screens.dashboard_screen import DashboardPanel
+from llmbuster.tui.screens.findings_screen import FindingsPanel
+from llmbuster.tui.screens.history_screen import HistoryPanel
+from llmbuster.tui.screens.main_screen import MainScreen
 
 __all__ = [
-    "ConfigScreen",
-    "DashboardScreen",
-    "FindingsScreen",
-    "HistoryScreen",
+    "ConfigPanel",
+    "DashboardPanel",
+    "FindingsPanel",
+    "HistoryPanel",
+    "MainScreen",
     "ScanConfigResult",
+    "ScanConfigSubmitted",
 ]

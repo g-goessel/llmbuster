@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+from textual.app import App, ComposeResult
 from textual.widgets import DataTable, ProgressBar, Static
 
 from llmbuster.domain.models import Metrics, OwaspCategory, Payload, Verdict
 from llmbuster.orchestrator import ProgressEvent, ScanConfig, ScanOrchestrator
 from llmbuster.tui import LlmBusterApp
-from llmbuster.tui.screens import DashboardScreen
+from llmbuster.tui.screens import DashboardPanel, MainScreen
 
 
 def _event(
@@ -52,21 +55,24 @@ def _orchestrator() -> ScanOrchestrator:
     )
 
 
+class _DashApp(App[None]):
+    def compose(self) -> ComposeResult:
+        yield DashboardPanel(id="dashboard-panel")
+
+
 @pytest.mark.asyncio
 async def test_dashboard_initial_state() -> None:
-    app = LlmBusterApp()
+    app = _DashApp()
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen("dashboard")
         await pilot.pause()
-        screen = app.get_screen("dashboard")
-        assert isinstance(screen, DashboardScreen)
-        assert str(screen.query_one("#findings", Static).content) == "0"
-        assert str(screen.query_one("#ttft_avg", Static).content) == "0"
-        assert str(screen.query_one("#tps_avg", Static).content) == "0"
-        assert str(screen.query_one("#errors", Static).content) == "0"
-        assert str(screen.query_one("#progress", Static).content) == "0 / 0"
-        assert screen.query_one("#progress-bar", ProgressBar) is not None
-        table = screen.query_one("#category-table", DataTable)
+        panel = app.query_one(DashboardPanel)
+        assert str(panel.query_one("#findings", Static).content) == "0"
+        assert str(panel.query_one("#ttft_avg", Static).content) == "0"
+        assert str(panel.query_one("#tps_avg", Static).content) == "0"
+        assert str(panel.query_one("#errors", Static).content) == "0"
+        assert str(panel.query_one("#progress", Static).content) == "0 / 0"
+        assert panel.query_one("#progress-bar", ProgressBar) is not None
+        table = panel.query_one("#category-table", DataTable)
         assert table.row_count == 10
         assert table.get_row(OwaspCategory.LLM01.value) == [
             OwaspCategory.LLM01.value,
@@ -86,43 +92,39 @@ async def test_dashboard_initial_state() -> None:
 
 @pytest.mark.asyncio
 async def test_handle_event_updates_counters() -> None:
-    app = LlmBusterApp()
+    app = _DashApp()
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen("dashboard")
         await pilot.pause()
-        screen = app.get_screen("dashboard")
-        assert isinstance(screen, DashboardScreen)
-        screen.handle_event(
+        panel = app.query_one(DashboardPanel)
+        panel.handle_event(
             _event(
                 verdict=Verdict.VULNERABLE,
                 ttft_ms=200,
                 tps=10.0,
             )
         )
-        assert str(screen.query_one("#findings", Static).content) == "1"
-        assert str(screen.query_one("#ttft_avg", Static).content) == "200"
-        assert str(screen.query_one("#tps_avg", Static).content) == "10.0"
-        assert str(screen.query_one("#errors", Static).content) == "0"
+        assert str(panel.query_one("#findings", Static).content) == "1"
+        assert str(panel.query_one("#ttft_avg", Static).content) == "200"
+        assert str(panel.query_one("#tps_avg", Static).content) == "10.0"
+        assert str(panel.query_one("#errors", Static).content) == "0"
 
 
 @pytest.mark.asyncio
 async def test_per_category_table() -> None:
-    app = LlmBusterApp()
+    app = _DashApp()
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen("dashboard")
         await pilot.pause()
-        screen = app.get_screen("dashboard")
-        assert isinstance(screen, DashboardScreen)
-        screen.handle_event(
+        panel = app.query_one(DashboardPanel)
+        panel.handle_event(
             _event(pid="p1", verdict=Verdict.VULNERABLE, cat=OwaspCategory.LLM01.value)
         )
-        screen.handle_event(
+        panel.handle_event(
             _event(pid="p1", verdict=Verdict.SAFE, cat=OwaspCategory.LLM01.value)
         )
-        screen.handle_event(
+        panel.handle_event(
             _event(pid="p2", verdict=Verdict.ERROR, cat=OwaspCategory.LLM02.value)
         )
-        table = screen.query_one("#category-table", DataTable)
+        table = panel.query_one("#category-table", DataTable)
         assert table.get_row(OwaspCategory.LLM01.value) == [
             OwaspCategory.LLM01.value,
             2,
@@ -137,55 +139,50 @@ async def test_per_category_table() -> None:
             0,
             1,
         ]
-        assert str(screen.query_one("#findings", Static).content) == "1"
-        assert str(screen.query_one("#errors", Static).content) == "1"
+        assert str(panel.query_one("#findings", Static).content) == "1"
+        assert str(panel.query_one("#errors", Static).content) == "1"
 
 
 @pytest.mark.asyncio
 async def test_progress_bar_advances() -> None:
-    app = LlmBusterApp()
+    app = _DashApp()
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen("dashboard")
         await pilot.pause()
-        screen = app.get_screen("dashboard")
-        assert isinstance(screen, DashboardScreen)
-        screen.handle_event(_event(pid="a", phase="started"))
-        screen.handle_event(_event(pid="b", phase="started"))
-        screen.handle_event(
+        panel = app.query_one(DashboardPanel)
+        panel.handle_event(_event(pid="a", phase="started"))
+        panel.handle_event(_event(pid="b", phase="started"))
+        panel.handle_event(
             _event(pid="a", verdict=Verdict.SAFE, phase="completed")
         )
-        assert str(screen.query_one("#progress", Static).content) == "1 / 2"
-        screen.handle_event(
+        assert str(panel.query_one("#progress", Static).content) == "1 / 2"
+        panel.handle_event(
             _event(pid="b", verdict=Verdict.SAFE, phase="completed")
         )
-        assert str(screen.query_one("#progress", Static).content) == "2 / 2"
+        assert str(panel.query_one("#progress", Static).content) == "2 / 2"
 
 
 @pytest.mark.asyncio
 async def test_averages_excluded_when_none() -> None:
-    app = LlmBusterApp()
+    app = _DashApp()
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen("dashboard")
         await pilot.pause()
-        screen = app.get_screen("dashboard")
-        assert isinstance(screen, DashboardScreen)
-        screen.handle_event(_event(ttft_ms=200, tps=10.0))
-        assert str(screen.query_one("#ttft_avg", Static).content) == "200"
-        assert str(screen.query_one("#tps_avg", Static).content) == "10.0"
-        screen.handle_event(_event(ttft_ms=None, tps=None))
-        assert str(screen.query_one("#ttft_avg", Static).content) == "200"
-        assert str(screen.query_one("#tps_avg", Static).content) == "10.0"
+        panel = app.query_one(DashboardPanel)
+        panel.handle_event(_event(ttft_ms=200, tps=10.0))
+        assert str(panel.query_one("#ttft_avg", Static).content) == "200"
+        assert str(panel.query_one("#tps_avg", Static).content) == "10.0"
+        panel.handle_event(_event(ttft_ms=None, tps=None))
+        assert str(panel.query_one("#ttft_avg", Static).content) == "200"
+        assert str(panel.query_one("#tps_avg", Static).content) == "10.0"
 
 
 @pytest.mark.asyncio
-async def test_via_app_drain_forwards_to_dashboard() -> None:
-    app = LlmBusterApp()
+async def test_via_app_drain_forwards_to_dashboard(tmp_path: Path) -> None:
+    app = LlmBusterApp(db_path=tmp_path / "dash.db")
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        app.push_screen("dashboard")
-        await pilot.pause()
-        screen = app.get_screen("dashboard")
-        assert isinstance(screen, DashboardScreen)
+        screen = app.screen
+        assert isinstance(screen, MainScreen)
+        panel = screen.query_one("#dashboard-panel", DashboardPanel)
         orchestrator = _orchestrator()
         app.attach_orchestrator(orchestrator)
         await orchestrator.progress_queue.put(
@@ -208,11 +205,11 @@ async def test_via_app_drain_forwards_to_dashboard() -> None:
         assert app._drainer is not None
         await app._drainer
         assert len(app.progress_events) == 2
-        assert str(screen.query_one("#findings", Static).content) == "1"
-        assert str(screen.query_one("#errors", Static).content) == "1"
-        assert str(screen.query_one("#ttft_avg", Static).content) == "100"
-        assert str(screen.query_one("#tps_avg", Static).content) == "5.0"
-        table = screen.query_one("#category-table", DataTable)
+        assert str(panel.query_one("#findings", Static).content) == "1"
+        assert str(panel.query_one("#errors", Static).content) == "1"
+        assert str(panel.query_one("#ttft_avg", Static).content) == "100"
+        assert str(panel.query_one("#tps_avg", Static).content) == "5.0"
+        table = panel.query_one("#category-table", DataTable)
         assert table.get_row(OwaspCategory.LLM01.value) == [
             OwaspCategory.LLM01.value,
             1,
@@ -230,10 +227,17 @@ async def test_via_app_drain_forwards_to_dashboard() -> None:
 
 
 @pytest.mark.asyncio
-async def test_drain_does_not_crash_when_dashboard_not_mounted() -> None:
-    app = LlmBusterApp()
+async def test_drain_collects_when_screen_not_main(tmp_path: Path) -> None:
+    app = LlmBusterApp(db_path=tmp_path / "dash.db")
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
+        assert isinstance(app.screen, MainScreen)
+        from textual.screen import Screen
+
+        other = Screen()
+        app.push_screen(other)
+        await pilot.pause()
+        assert app.screen is other
         orchestrator = _orchestrator()
         app.attach_orchestrator(orchestrator)
         await orchestrator.progress_queue.put(

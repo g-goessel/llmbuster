@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from pathlib import Path
 
 from textual import on
 from textual.app import App, ComposeResult
@@ -10,11 +11,11 @@ from textual.events import Unmount
 from textual.widgets import Footer, Header
 
 from llmbuster.orchestrator import ProgressEvent, ScanOrchestrator
+from llmbuster.store.sqlite_store import SQLiteStore
 from llmbuster.tui.screens import (
-    ConfigScreen,
-    DashboardScreen,
-    FindingsScreen,
-    HistoryScreen,
+    MainScreen,
+    ScanConfigResult,
+    ScanConfigSubmitted,
 )
 
 
@@ -22,9 +23,6 @@ class LlmBusterApp(App[None]):
     TITLE = "llmbuster"
 
     CSS = """
-    Screen {
-        align: center middle;
-    }
     #msg {
         padding: 1 2;
         border: round $panel;
@@ -42,25 +40,22 @@ class LlmBusterApp(App[None]):
         Binding("?", "show_help_panel", "Help"),
     ]
 
-    SCREENS = {
-        "config": ConfigScreen,
-        "dashboard": DashboardScreen,
-        "history": HistoryScreen,
-        "findings": FindingsScreen,
-    }
-
-    def __init__(self) -> None:
+    def __init__(self, db_path: Path = Path("./llmbuster.db")) -> None:
         super().__init__()
+        self.db_path = db_path
         self._orchestrator: ScanOrchestrator | None = None
         self._drainer: asyncio.Task[None] | None = None
         self.progress_events: list[ProgressEvent] = []
+        self._store: SQLiteStore | None = None
+        self.last_config: ScanConfigResult | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.push_screen("config")
+        self._store = SQLiteStore(self.db_path)
+        self.push_screen(MainScreen(self._store))
         self._maybe_start_drainer()
 
     def attach_orchestrator(self, orchestrator: ScanOrchestrator) -> None:
@@ -86,14 +81,17 @@ class LlmBusterApp(App[None]):
                 if event is None:
                     break
                 self.progress_events.append(event)
-                try:
-                    screen = self.get_screen("dashboard")
-                except Exception:
-                    screen = None
-                if screen is not None and isinstance(screen, DashboardScreen):
-                    screen.handle_event(event)
+                screen = self.screen
+                if isinstance(screen, MainScreen):
+                    panel = screen.get_dashboard()
+                    if panel is not None:
+                        panel.handle_event(event)
         except asyncio.CancelledError:
             raise
+
+    @on(ScanConfigSubmitted)
+    def _on_scan_config_submitted(self, event: ScanConfigSubmitted) -> None:
+        self.last_config = event.result
 
     @on(Unmount)
     async def on_unmount(self) -> None:
@@ -103,15 +101,24 @@ class LlmBusterApp(App[None]):
             with contextlib.suppress(asyncio.CancelledError):
                 await drainer
         self._drainer = None
+        if self._store is not None:
+            self._store.close()
+            self._store = None
 
     def action_go_config(self) -> None:
-        self.switch_screen("config")
+        self._activate_tab("tab-config")
 
     def action_go_dashboard(self) -> None:
-        self.switch_screen("dashboard")
+        self._activate_tab("tab-dashboard")
 
     def action_go_history(self) -> None:
-        self.switch_screen("history")
+        self._activate_tab("tab-history")
 
     def action_go_findings(self) -> None:
-        self.switch_screen("findings")
+        self._activate_tab("tab-findings")
+
+    def _activate_tab(self, tab_id: str) -> None:
+        screen = self.screen
+        if isinstance(screen, MainScreen):
+            screen.activate_tab(tab_id)
+

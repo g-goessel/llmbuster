@@ -3,23 +3,29 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from textual.app import App
-from textual.widgets import DataTable, Input, Static
+from textual.app import App, ComposeResult
+from textual.widget import Widget
+from textual.widgets import DataTable, Input, Select, Static
 
 from llmbuster.domain.models import OwaspCategory, Verdict
 from llmbuster.store.sqlite_store import InteractionRecord, RunRecord, SQLiteStore
-from llmbuster.tui.screens import HistoryScreen
+from llmbuster.tui.screens import HistoryPanel
 
 
 class _HarnessApp(App[None]):
-    pass
+    def __init__(self, panel: Widget) -> None:
+        super().__init__()
+        self._panel = panel
+
+    def compose(self) -> ComposeResult:
+        yield self._panel
 
 
-def _make_run() -> RunRecord:
+def _make_run(target_name: str = "Bot") -> RunRecord:
     return RunRecord(
         started_at="2026-07-04T12:00:00+00:00",
         target_kind="profile",
-        target_name="Bot",
+        target_name=target_name,
         model="gpt-x",
         system_prompt="you are bot",
         config_json='{"repeat":3}',
@@ -96,13 +102,11 @@ async def test_table_renders_all_interactions(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(HistoryPanel(store, run_id))
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen(HistoryScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, HistoryScreen)
-        table = screen.query_one("#history-table", DataTable)
+        panel = app.query_one(HistoryPanel)
+        table = panel.query_one("#history-table", DataTable)
         assert table.row_count == 5
         columns = [str(c.label) for c in table.ordered_columns]
         assert columns == [
@@ -124,13 +128,11 @@ async def test_category_filter(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(HistoryPanel(store, run_id))
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen(HistoryScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, HistoryScreen)
-        cat_input = screen.query_one("#category-filter", Input)
+        panel = app.query_one(HistoryPanel)
+        cat_input = panel.query_one("#category-filter", Input)
         cat_input.focus()
         await pilot.pause()
         for char in "LLM01":
@@ -138,7 +140,7 @@ async def test_category_filter(
             await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        table = screen.query_one("#history-table", DataTable)
+        table = panel.query_one("#history-table", DataTable)
         assert table.row_count == 3
         for i in range(table.row_count):
             assert table.get_row_at(i)[1] == "LLM01"
@@ -150,18 +152,16 @@ async def test_verdict_filter(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(HistoryPanel(store, run_id))
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen(HistoryScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, HistoryScreen)
-        verd_input = screen.query_one("#verdict-filter", Input)
+        panel = app.query_one(HistoryPanel)
+        verd_input = panel.query_one("#verdict-filter", Input)
         verd_input.value = "vulnerable"
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        table = screen.query_one("#history-table", DataTable)
+        table = panel.query_one("#history-table", DataTable)
         assert table.row_count == 2
         for i in range(table.row_count):
             assert table.get_row_at(i)[5] == "vulnerable"
@@ -173,18 +173,16 @@ async def test_row_select_shows_detail(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(HistoryPanel(store, run_id))
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen(HistoryScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, HistoryScreen)
-        table = screen.query_one("#history-table", DataTable)
+        panel = app.query_one(HistoryPanel)
+        table = panel.query_one("#history-table", DataTable)
         table.focus()
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        detail_text = _detail_text(screen)
+        detail_text = _detail_text(panel)
         assert "system" in detail_text or "user" in detail_text
         assert "Raw Request" in detail_text
         assert '"body": "hi"' in detail_text or "hi" in detail_text
@@ -202,18 +200,89 @@ async def test_row_select_shows_detail(
 async def test_empty_run_shows_empty_table(tmp_path: Path) -> None:
     db = tmp_path / "empty.db"
     store = SQLiteStore(db)
-    app = _HarnessApp()
+    app = _HarnessApp(HistoryPanel(store, 9999))
     async with app.run_test(size=(120, 40)) as pilot:
-        app.push_screen(HistoryScreen(store, 9999))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, HistoryScreen)
-        table = screen.query_one("#history-table", DataTable)
+        panel = app.query_one(HistoryPanel)
+        table = panel.query_one("#history-table", DataTable)
         assert table.row_count == 0
     store.close()
 
 
-def _detail_text(screen: HistoryScreen) -> str:
-    detail = screen.query_one("#detail")
+@pytest.mark.asyncio
+async def test_run_picker_lists_runs(
+    seeded_store: tuple[SQLiteStore, int],
+) -> None:
+    store, run_id = seeded_store
+    app = _HarnessApp(HistoryPanel(store, run_id))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(HistoryPanel)
+        select = panel.query_one("#run-select", Select)
+        assert select.value == run_id
+        assert isinstance(select.value, int)
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_run_picker_switches_run(tmp_path: Path) -> None:
+    db = tmp_path / "multi.db"
+    store = SQLiteStore(db)
+    older_id = store.create_run(_make_run("Older"))
+    for pid in ("p1", "p2", "p3"):
+        store.insert_interaction(
+            _make_interaction(
+                older_id,
+                payload_id=pid,
+                owasp=OwaspCategory.LLM01,
+                attempt=0,
+                verdict=Verdict.VULNERABLE,
+            )
+        )
+    newer_id = store.create_run(_make_run("Newer"))
+    store.insert_interaction(
+        _make_interaction(
+            newer_id,
+            payload_id="only-new",
+            owasp=OwaspCategory.LLM02,
+            attempt=0,
+            verdict=Verdict.SAFE,
+        )
+    )
+
+    app = _HarnessApp(HistoryPanel(store))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(HistoryPanel)
+        select = panel.query_one("#run-select", Select)
+        assert select.value == newer_id
+        table = panel.query_one("#history-table", DataTable)
+        assert table.row_count == 1
+
+        select.value = older_id
+        await pilot.pause()
+        await pilot.pause()
+        assert select.value == older_id
+        assert table.row_count == 3
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_run_picker_empty_when_no_runs(tmp_path: Path) -> None:
+    db = tmp_path / "noruns.db"
+    store = SQLiteStore(db)
+    app = _HarnessApp(HistoryPanel(store))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(HistoryPanel)
+        select = panel.query_one("#run-select", Select)
+        assert select.value == Select.NULL
+        table = panel.query_one("#history-table", DataTable)
+        assert table.row_count == 0
+    store.close()
+
+
+def _detail_text(panel: HistoryPanel) -> str:
+    detail = panel.query_one("#detail")
     statics = detail.query(Static)
     return "\n".join(str(s.content) for s in statics)

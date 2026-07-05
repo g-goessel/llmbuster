@@ -329,9 +329,15 @@ def report(
 
 
 @app.command("tui")
-def tui() -> None:
+def tui(
+    db: Path = typer.Option(
+        Path("./llmbuster.db"),
+        "--db",
+        help="SQLite database file.",
+    ),
+) -> None:
     """Launch the interactive terminal UI."""
-    LlmBusterApp().run()
+    LlmBusterApp(db_path=db).run()
 
 
 if __name__ == "__main__":

@@ -208,6 +208,19 @@ def test_get_run_round_trip(tmp_path: Path) -> None:
     assert fetched == run
 
 
+def test_list_runs_returns_newest_first(tmp_path: Path) -> None:
+    db = tmp_path / "t.db"
+    store = _open(db)
+    id_a = store.create_run(_make_run(target_name="A"))
+    id_b = store.create_run(_make_run(target_name="B"))
+    id_c = store.create_run(_make_run(target_name="C"))
+    runs = store.list_runs()
+    store.close()
+    assert [r.id for r in runs] == [id_c, id_b, id_a]
+    assert all(r.id is not None for r in runs)
+    assert runs[0].target_name == "C"
+
+
 def test_domain_round_trip(tmp_path: Path) -> None:
     db = tmp_path / "t.db"
     store = _open(db)

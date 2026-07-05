@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import DataTable, Label, ProgressBar, Static
 
 from llmbuster.domain.models import OwaspCategory, Verdict
@@ -11,41 +10,47 @@ from llmbuster.orchestrator import ProgressEvent
 _CATEGORIES: list[str] = [cat.value for cat in OwaspCategory]
 
 
-class DashboardScreen(Screen[None]):
+class DashboardPanel(Vertical):
     CSS = """
-    DashboardScreen {
+    DashboardPanel {
         align: center top;
+        height: 1fr;
     }
-    DashboardScreen #title {
+    DashboardPanel #title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    DashboardScreen #counters {
+    DashboardPanel #counters {
         height: 3;
         margin-bottom: 1;
     }
-    DashboardScreen #counters Vertical {
+    DashboardPanel #counters Vertical {
         width: 1fr;
         text-align: center;
     }
-    DashboardScreen #counters Static {
+    DashboardPanel #counters Static {
         text-style: bold;
     }
-    DashboardScreen #progress {
+    DashboardPanel #progress {
         text-align: center;
         margin-bottom: 1;
     }
-    DashboardScreen #progress-bar {
+    DashboardPanel #progress-bar {
         margin-bottom: 1;
     }
-    DashboardScreen #category-table {
+    DashboardPanel #category-table {
         width: 1fr;
     }
     """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+    ) -> None:
+        super().__init__(name=name, id=id, classes=classes)
         self._total_attempted: int = 0
         self._completed: int = 0
         self._findings: int = 0

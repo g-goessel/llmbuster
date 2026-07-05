@@ -1,49 +1,51 @@
 from __future__ import annotations
 
 import json
-from typing import ClassVar
 
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalScroll
-from textual.screen import Screen
-from textual.widgets import DataTable, Input, Static
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import DataTable, Input, Select, Static
+from textual.widgets._select import NoSelection
 
 from llmbuster.store.sqlite_store import InteractionRecord, SQLiteStore
 
 _MAX_RESPONSE_CHARS = 4000
 
 
-class HistoryScreen(Screen[None]):
-    AUTO_FOCUS: ClassVar[str | None] = ""
-
+class HistoryPanel(Vertical):
     CSS = """
-    HistoryScreen {
+    HistoryPanel {
         align: center top;
+        height: 1fr;
     }
-    HistoryScreen #title {
+    HistoryPanel #title {
         text-align: center;
         text-style: bold;
         margin-bottom: 1;
     }
-    HistoryScreen #filters {
+    HistoryPanel #run-select {
+        margin-bottom: 1;
+        width: 1fr;
+    }
+    HistoryPanel #filters {
         height: 3;
         margin-bottom: 1;
     }
-    HistoryScreen #filters Input {
+    HistoryPanel #filters Input {
         width: 1fr;
         margin-right: 1;
     }
-    HistoryScreen #history-table {
+    HistoryPanel #history-table {
         height: 12;
         margin-bottom: 1;
     }
-    HistoryScreen #detail {
+    HistoryPanel #detail {
         height: 1fr;
         border: round $panel;
         padding: 0 1;
     }
-    HistoryScreen #detail Static {
+    HistoryPanel #detail Static {
         margin-bottom: 1;
     }
     """
@@ -62,7 +64,14 @@ class HistoryScreen(Screen[None]):
         self._records: list[InteractionRecord] = []
 
     def compose(self) -> ComposeResult:
+        options = self._run_options()
         yield Static(f"Proxy History — Run {self._run_id}", id="title")
+        yield Select(
+            options=options,
+            value=self._initial_value(options),
+            id="run-select",
+            allow_blank=True,
+        )
         with Horizontal(id="filters"):
             yield Input(
                 placeholder="Filter by category (e.g. LLM01)",
@@ -95,13 +104,59 @@ class HistoryScreen(Screen[None]):
         table.add_column("TTFT(ms)", key="ttft")
         table.add_column("TPS", key="tps")
         table.add_column("Detector", key="detector")
+        select = self.query_one("#run-select", Select)
+        value = select.value
+        if isinstance(value, int):
+            self._run_id = value
         self._reload()
 
+    def _run_options(self) -> list[tuple[str, int]]:
+        if self._store is None:
+            return []
+        options: list[tuple[str, int]] = []
+        for run in self._store.list_runs():
+            if run.id is None:
+                continue
+            label = (
+                f"#{run.id} — {run.target_name or run.target_kind} ({run.started_at})"
+            )
+            options.append((label, run.id))
+        return options
+
+    def _initial_value(
+        self, options: list[tuple[str, int]]
+    ) -> int | NoSelection:
+        ids = [value for _, value in options]
+        if self._run_id in ids:
+            return self._run_id
+        if ids:
+            return ids[0]
+        return Select.NULL
+
+    def refresh_runs(self) -> None:
+        select = self.query_one("#run-select", Select)
+        options = self._run_options()
+        select.set_options(options)
+        value = self._initial_value(options)
+        select.value = value
+        if isinstance(value, int):
+            self._run_id = value
+        self._reload()
+
+    @on(Select.Changed)
+    def _on_run_changed(self, event: Select.Changed) -> None:
+        if event.control.id == "run-select" and isinstance(event.value, int):
+            self._run_id = event.value
+            self._reload()
+
     def _reload(self) -> None:
-        if self._store is not None:
+        if self._store is not None and self._run_id > 0:
             self._records = self._store.interactions_for_run(self._run_id)
         else:
             self._records = []
+        self.query_one("#title", Static).update(
+            f"Proxy History — Run {self._run_id}"
+        )
         self._apply_filters()
 
     def _apply_filters(self) -> None:

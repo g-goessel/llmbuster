@@ -3,24 +3,30 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from textual.app import App
-from textual.widgets import DataTable, Static
+from textual.app import App, ComposeResult
+from textual.widget import Widget
+from textual.widgets import DataTable, Select, Static
 from textual.widgets._data_table import RowDoesNotExist
 
 from llmbuster.domain.models import OwaspCategory, Verdict
 from llmbuster.store.sqlite_store import InteractionRecord, RunRecord, SQLiteStore
-from llmbuster.tui.screens import FindingsScreen
+from llmbuster.tui.screens import FindingsPanel
 
 
 class _HarnessApp(App[None]):
-    pass
+    def __init__(self, panel: Widget) -> None:
+        super().__init__()
+        self._panel = panel
+
+    def compose(self) -> ComposeResult:
+        yield self._panel
 
 
-def _make_run() -> RunRecord:
+def _make_run(target_name: str = "Bot") -> RunRecord:
     return RunRecord(
         started_at="2026-07-04T12:00:00+00:00",
         target_kind="profile",
-        target_name="Bot",
+        target_name=target_name,
         model="gpt-x",
         system_prompt="you are bot",
         config_json='{"repeat":3}',
@@ -159,21 +165,19 @@ def seeded_store(tmp_path: Path) -> tuple[SQLiteStore, int]:
 
 
 @pytest.mark.asyncio
-async def test_findings_screen_renders(
+async def test_findings_panel_renders(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(FindingsPanel(store, run_id))
     async with app.run_test(size=(140, 44)) as pilot:
-        app.push_screen(FindingsScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, FindingsScreen)
-        assert str(screen.query_one("#total-interactions", Static).content) == "7"
-        assert str(screen.query_one("#total-vulnerable", Static).content) == "2"
-        assert str(screen.query_one("#overall-vuln-rate", Static).content) == "28.6%"
-        category_table = screen.query_one("#category-table", DataTable)
-        payload_table = screen.query_one("#payload-table", DataTable)
+        panel = app.query_one(FindingsPanel)
+        assert str(panel.query_one("#total-interactions", Static).content) == "7"
+        assert str(panel.query_one("#total-vulnerable", Static).content) == "2"
+        assert str(panel.query_one("#overall-vuln-rate", Static).content) == "28.6%"
+        category_table = panel.query_one("#category-table", DataTable)
+        payload_table = panel.query_one("#payload-table", DataTable)
         assert category_table.row_count == 3
         assert payload_table.row_count == 2
     store.close()
@@ -184,13 +188,11 @@ async def test_category_table_values(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(FindingsPanel(store, run_id))
     async with app.run_test(size=(140, 44)) as pilot:
-        app.push_screen(FindingsScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, FindingsScreen)
-        table = screen.query_one("#category-table", DataTable)
+        panel = app.query_one(FindingsPanel)
+        table = panel.query_one("#category-table", DataTable)
         assert [str(c.label) for c in table.ordered_columns] == [
             "Category",
             "Total",
@@ -243,13 +245,11 @@ async def test_payload_table_only_vulnerable(
     seeded_store: tuple[SQLiteStore, int],
 ) -> None:
     store, run_id = seeded_store
-    app = _HarnessApp()
+    app = _HarnessApp(FindingsPanel(store, run_id))
     async with app.run_test(size=(140, 44)) as pilot:
-        app.push_screen(FindingsScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, FindingsScreen)
-        table = screen.query_one("#payload-table", DataTable)
+        panel = app.query_one(FindingsPanel)
+        table = panel.query_one("#payload-table", DataTable)
         assert [str(c.label) for c in table.ordered_columns] == [
             "Payload ID",
             "Category",
@@ -285,19 +285,94 @@ async def test_empty_run_no_crash(tmp_path: Path) -> None:
     db = tmp_path / "empty.db"
     store = SQLiteStore(db)
     run_id = store.create_run(_make_run())
-    app = _HarnessApp()
+    app = _HarnessApp(FindingsPanel(store, run_id))
     async with app.run_test(size=(140, 44)) as pilot:
-        app.push_screen(FindingsScreen(store, run_id))
         await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, FindingsScreen)
-        assert str(screen.query_one("#total-interactions", Static).content) == "0"
-        assert str(screen.query_one("#total-vulnerable", Static).content) == "0"
-        assert str(screen.query_one("#overall-vuln-rate", Static).content) == "-"
-        assert str(screen.query_one("#avg-ttft", Static).content) == "-"
-        assert str(screen.query_one("#avg-tps", Static).content) == "-"
-        category_table = screen.query_one("#category-table", DataTable)
-        payload_table = screen.query_one("#payload-table", DataTable)
+        panel = app.query_one(FindingsPanel)
+        assert str(panel.query_one("#total-interactions", Static).content) == "0"
+        assert str(panel.query_one("#total-vulnerable", Static).content) == "0"
+        assert str(panel.query_one("#overall-vuln-rate", Static).content) == "-"
+        assert str(panel.query_one("#avg-ttft", Static).content) == "-"
+        assert str(panel.query_one("#avg-tps", Static).content) == "-"
+        category_table = panel.query_one("#category-table", DataTable)
+        payload_table = panel.query_one("#payload-table", DataTable)
         assert category_table.row_count == 0
         assert payload_table.row_count == 0
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_run_picker_lists_runs(
+    seeded_store: tuple[SQLiteStore, int],
+) -> None:
+    store, run_id = seeded_store
+    app = _HarnessApp(FindingsPanel(store, run_id))
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(FindingsPanel)
+        select = panel.query_one("#run-select", Select)
+        assert select.value == run_id
+        assert isinstance(select.value, int)
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_run_picker_switches_run(tmp_path: Path) -> None:
+    db = tmp_path / "multi.db"
+    store = SQLiteStore(db)
+    older_id = store.create_run(_make_run("Older"))
+    store.insert_interaction(
+        _make_interaction(
+            older_id,
+            payload_id="p-old",
+            owasp=OwaspCategory.LLM01,
+            attempt=0,
+            verdict=Verdict.VULNERABLE,
+            ttft_ms=100,
+            tps=10.0,
+            duration_ms=200,
+        )
+    )
+    store.insert_interaction(
+        _make_interaction(
+            older_id,
+            payload_id="p-old",
+            owasp=OwaspCategory.LLM01,
+            attempt=1,
+            verdict=Verdict.SAFE,
+            ttft_ms=200,
+            tps=20.0,
+            duration_ms=400,
+        )
+    )
+    newer_id = store.create_run(_make_run("Newer"))
+    store.insert_interaction(
+        _make_interaction(
+            newer_id,
+            payload_id="p-new",
+            owasp=OwaspCategory.LLM06,
+            attempt=0,
+            verdict=Verdict.SAFE,
+            ttft_ms=50,
+            tps=5.0,
+            duration_ms=100,
+        )
+    )
+
+    app = _HarnessApp(FindingsPanel(store))
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause()
+        panel = app.query_one(FindingsPanel)
+        select = panel.query_one("#run-select", Select)
+        assert select.value == newer_id
+        assert str(panel.query_one("#total-interactions", Static).content) == "1"
+        cat_table = panel.query_one("#category-table", DataTable)
+        assert cat_table.row_count == 1
+
+        select.value = older_id
+        await pilot.pause()
+        await pilot.pause()
+        assert select.value == older_id
+        assert str(panel.query_one("#total-interactions", Static).content) == "2"
+        assert str(panel.query_one("#total-vulnerable", Static).content) == "1"
     store.close()
