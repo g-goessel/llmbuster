@@ -13,9 +13,10 @@ from llmbuster.domain.models import (
     TargetResponse,
     Verdict,
 )
-from llmbuster.domain.protocols import Detector, Target
+from llmbuster.domain.protocols import AsyncDetector, Detector, Target
 
 __all__ = [
+    "AsyncDetector",
     "CanaryDetectorConfig",
     "ChatHistory",
     "Detector",

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
+from llmbuster.detector.judge import LlmJudgeDetector
 from llmbuster.detector.registry import default_registry
 from llmbuster.domain.models import (
     ChatHistory,
@@ -30,6 +31,7 @@ class ScanConfig(BaseModel):
     system_prompt: str | None = None
     categories: list[str] | None = None
     escalate: bool = False
+    judge_model: str | None = None
 
 
 class ProgressEvent(BaseModel):
@@ -59,11 +61,13 @@ class ScanOrchestrator:
         config: ScanConfig,
         payloads: list[Payload],
         owasp_categories: dict[str, OwaspCategory],
+        judge_target: Target | None = None,
     ) -> None:
         self._target = target
         self._config = config
         self._payloads = payloads
         self._owasp_categories = owasp_categories
+        self._judge_target = judge_target
         self._interaction_queue: asyncio.Queue[Interaction | None] = asyncio.Queue()
         self._progress_queue: asyncio.Queue[ProgressEvent | None] = asyncio.Queue()
         self._semaphore = asyncio.Semaphore(config.concurrency)
@@ -217,7 +221,9 @@ class ScanOrchestrator:
                         metrics=Metrics(),
                         error=f"target error: {exc!s}",
                     )
-                verdict, detector_id, detector_detail = self._evaluate(item.payload, response)
+                verdict, detector_id, detector_detail = await self._evaluate(
+                    item.payload, response, history.to_messages_json()
+                )
                 interaction = Interaction(
                     run_id=self._config.run_id,
                     payload_id=item.payload.id,
@@ -252,8 +258,8 @@ class ScanOrchestrator:
             finally:
                 self._active -= 1
 
-    def _evaluate(
-        self, payload: Payload, response: TargetResponse
+    async def _evaluate(
+        self, payload: Payload, response: TargetResponse, sent_history_json: str
     ) -> tuple[Verdict, str | None, str | None]:
         if response.error is not None:
             return Verdict.ERROR, None, response.error
@@ -265,6 +271,12 @@ class ScanOrchestrator:
         results = [d.evaluate(payload, response.reply) for d in detectors]
         for idx, (v, detail) in enumerate(results):
             if v is Verdict.VULNERABLE:
+                if self._judge_target is not None:
+                    judge = LlmJudgeDetector(detectors[idx], self._judge_target)
+                    jv, jdetail = await judge.evaluate(
+                        payload, response.reply, sent_history_json
+                    )
+                    return jv, "LlmJudgeDetector", jdetail
                 return Verdict.VULNERABLE, type(detectors[idx]).__name__, detail
         for v, detail in results:
             if v is Verdict.ERROR:

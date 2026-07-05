@@ -1,4 +1,5 @@
 from llmbuster.detector.heuristic import CanaryDetector, RegexDetector
+from llmbuster.detector.judge import LlmJudgeDetector
 from llmbuster.detector.registry import (
     DetectorRegistry,
     UnknownDetectorError,
@@ -8,6 +9,7 @@ from llmbuster.detector.registry import (
 __all__ = [
     "CanaryDetector",
     "DetectorRegistry",
+    "LlmJudgeDetector",
     "RegexDetector",
     "UnknownDetectorError",
     "default_registry",

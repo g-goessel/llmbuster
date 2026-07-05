@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 
 from llmbuster.domain.models import ChatHistory, Message, Role
+from llmbuster.domain.protocols import Target
 from llmbuster.orchestrator import ScanConfig, ScanOrchestrator
 from llmbuster.payload.bundled import load_bundled_packs, load_bundled_packs_as_packs
 from llmbuster.report import ReportError, build_report, render_json, render_markdown
@@ -21,6 +22,7 @@ from llmbuster.target.factory import (
     init_profile,
     load_target,
 )
+from llmbuster.target.openrouter import build_target
 from llmbuster.tui import LlmBusterApp
 
 app = typer.Typer(
@@ -159,6 +161,14 @@ def scan_run(
         "--escalate",
         help="Enable escalation chains for vulnerable payloads.",
     ),
+    judge_model: str | None = typer.Option(
+        None,
+        "--judge-model",
+        help=(
+            "LLM model id for second-stage verification of canary hits "
+            "(e.g. openai/gpt-oss-20b:free)."
+        ),
+    ),
 ) -> None:
     try:
         loaded = load_target(profile)
@@ -167,6 +177,11 @@ def scan_run(
         raise typer.Exit(code=1) from None
 
     typer.echo(f"Target: {loaded.name} ({loaded.kind.value})")
+
+    judge_target: Target | None = None
+    if judge_model is not None:
+        judge_target = build_target(judge_model)
+        typer.echo(f"Judge model: {judge_model}")
 
     packs = load_bundled_packs_as_packs()
     payloads = load_bundled_packs()
@@ -184,7 +199,12 @@ def scan_run(
             target_name=loaded.name,
             system_prompt=system_prompt,
             config_json=json.dumps(
-                {"concurrency": concurrency, "repeat": repeat, "categories": categories}
+                {
+                    "concurrency": concurrency,
+                    "repeat": repeat,
+                    "categories": categories,
+                    "judge_model": judge_model,
+                }
             ),
         )
     )
@@ -197,9 +217,10 @@ def scan_run(
         system_prompt=system_prompt,
         categories=categories,
         escalate=escalate,
+        judge_model=judge_model,
     )
     orchestrator = ScanOrchestrator(
-        loaded.target, config, payloads, owasp_categories  # type: ignore[arg-type]
+        loaded.target, config, payloads, owasp_categories, judge_target=judge_target  # type: ignore[arg-type]
     )
     writer = WriterTask(store, orchestrator.interaction_queue)
 

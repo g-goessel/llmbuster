@@ -13,3 +13,10 @@ class Target(Protocol):
 @runtime_checkable
 class Detector(Protocol):
     def evaluate(self, payload: Payload, reply: str | None) -> tuple[Verdict, str]: ...
+
+
+@runtime_checkable
+class AsyncDetector(Protocol):
+    async def evaluate(
+        self, payload: Payload, reply: str | None, sent_history: str
+    ) -> tuple[Verdict, str]: ...
