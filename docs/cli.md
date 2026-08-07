@@ -28,6 +28,8 @@ overview. The `targets` and `scan` commands are sub-apps (use
 | `--system-prompt` | System prompt prepended to all requests.                |
 | `--escalate`      | Enable escalation chains for vulnerable payloads.       |
 | `--judge-model`   | LLM model id for second-stage verification of canary hits (e.g. `openai/gpt-oss-20b:free`). |
+| `--judge-mode`    | Judge `hits` (default), `all` responses, or a deterministic `sample`. |
+| `--judge-sample-rate` | Fraction of heuristic-safe responses judged in `sample` mode (default `0.25`). |
 
 Example:
 

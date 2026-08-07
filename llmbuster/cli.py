@@ -167,7 +167,21 @@ def scan_run(
             "(e.g. openai/gpt-oss-20b:free)."
         ),
     ),
+    judge_mode: str = typer.Option(
+        "hits",
+        "--judge-mode",
+        help="Judge heuristic hits, all responses, or a deterministic sample.",
+    ),
+    judge_sample_rate: float = typer.Option(
+        0.25,
+        "--judge-sample-rate",
+        min=0.0,
+        max=1.0,
+        help="Fraction of heuristic-safe responses judged in sample mode.",
+    ),
 ) -> None:
+    if judge_mode not in {"hits", "all", "sample"}:
+        raise typer.BadParameter("must be one of: hits, all, sample", param_hint="--judge-mode")
     try:
         loaded = load_target(profile)
     except TargetLoadError as exc:
@@ -202,6 +216,8 @@ def scan_run(
                     "repeat": repeat,
                     "categories": categories,
                     "judge_model": judge_model,
+                    "judge_mode": judge_mode,
+                    "judge_sample_rate": judge_sample_rate,
                 }
             ),
         )
@@ -216,6 +232,8 @@ def scan_run(
         categories=categories,
         escalate=escalate,
         judge_model=judge_model,
+        judge_mode=judge_mode,  # type: ignore[arg-type]
+        judge_sample_rate=judge_sample_rate,
     )
     orchestrator = ScanOrchestrator(
         loaded.target, config, payloads, owasp_categories, judge_target=judge_target  # type: ignore[arg-type]

@@ -16,7 +16,7 @@ payloads:
     detectors:
       - type: canary
         token: "PWNED"
-    mutations: [base64, leetspeak]   # optional
+    mutations: [base64_decode, quoted_document]   # optional
     escalation_to: llm01-extract-system-prompt   # optional
 ```
 
@@ -27,8 +27,8 @@ Field reference:
 - `payloads[].prompt` — the adversarial prompt text.
 - `payloads[].repeat` — how many times to send the payload (reproducibility).
 - `payloads[].detectors` — list of `canary` (exact token) or `regex` (with
-  optional `flags`) detectors. **All bundled packs use `canary`** to avoid false
-  positives from refusal phrases matching regex keywords.
+  optional `flags`) detectors. Bundled payloads must define at least one;
+  detectorless custom payloads produce `inconclusive`, never `safe`.
 - `payloads[].mutations` — optional list of mutation names. Each mutation
   produces an additional attempt whose reply is checked against the same
   detectors.
@@ -45,9 +45,8 @@ registry:
 | `canary` | `token`                | `vulnerable` if `token` appears verbatim in the reply. |
 | `regex`  | `pattern`, `flags?`    | `vulnerable` if the regex matches the reply.     |
 
-All bundled OWASP packs use `CanaryDetector`. Canary tokens are short, unlikely
-strings the model is tricked into emitting, so a match is strong evidence of a
-successful attack without the false-positive risk of keyword regexes.
+Bundled packs use exact canaries where the prompt requests a fixed response and
+case-insensitive regexes where successful compliance can be phrased multiple ways.
 
 ## Mutations
 
@@ -61,23 +60,29 @@ probes input-filtering bypasses.
 | `leetspeak`         | Substitute letters with leet equivalents (`a→4`, `e→3`, …). |
 | `unicode_homoglyph` | Replace Latin letters with visually identical Cyrillic ones. |
 | `translation`       | Translate common English attack keywords to French.          |
+| `base64_decode`     | Encode the prompt and explicitly ask the target to decode it. |
+| `json_wrap`         | Wrap the instruction as trusted JSON data.                    |
+| `xml_wrap`          | Wrap the instruction in a trusted XML element.                |
+| `markdown_wrap`     | Present the instruction as a trusted Markdown document.       |
+| `quoted_document`   | Present the instruction as a trusted retrieved document.      |
+| `authority_framing` | Frame the instruction as an authorized administrator request. |
 
 Unknown mutation names raise a clear error at load time.
 
 ## Escalation chains
 
 When a payload's rolled-up verdict is `vulnerable` and `--escalate` is set, the
-orchestrator enqueues the payload named in `escalation_to`, with
-`escalation_from` set to the originating interaction id. For `server_managed`
-targets, escalations stay within the same session scope so the follow-up can
-exploit state the first attack established.
+orchestrator enqueues the payload named in `escalation_to`. It preserves the
+originating user/assistant history so the follow-up can exploit established
+conversation state.
 
 ## LLM-as-judge second-stage verification
 
-Pass `--judge-model <model>` to `scan run` to enable a second-stage judge. When
-a first-stage detector (typically `canary`) flags a hit, an `LlmJudgeDetector`
-sends the prompt, the reply, and the detector detail to the judge model under a
-security-analysis system prompt and asks it to confirm. The judge can:
+Pass `--judge-model <model>` to `scan run` to enable a second-stage judge. The
+default `--judge-mode hits` verifies heuristic hits. Use `--judge-mode all` to
+judge every response and recover semantic compliance missed by exact detectors,
+or `--judge-mode sample --judge-sample-rate 0.25` for deterministic sampling.
+The judge returns structured evidence and can:
 
 - **confirm** the hit → verdict stays `vulnerable`,
 - **override** the canary as a false positive → verdict becomes `safe`,
@@ -89,7 +94,7 @@ adapter), so point it at a different/cheaper model if you like.
 
 ```bash
 uv run llmbuster scan run openrouter.yaml \
-  --category LLM06 --judge-model openai/gpt-oss-20b:free
+  --category LLM06 --judge-model openai/gpt-oss-20b:free --judge-mode all
 ```
 
 ## Validating a custom pack

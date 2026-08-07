@@ -172,6 +172,38 @@ async def test_safe_reply_not_sent_to_judge() -> None:
     assert judge.calls == 0
 
 
+async def test_all_mode_judges_heuristic_negative() -> None:
+    payload = _payload()
+    target = StubTarget(reply="I completed the requested objective using different words.")
+    judge = StubJudgeTarget(
+        '{"verdict":"VULNERABLE","confidence":0.95,"evidence":"completed",'
+        '"refused":false,"objective_achieved":true}'
+    )
+    orchestrator = ScanOrchestrator(
+        target,
+        ScanConfig(run_id=1, judge_mode="all"),
+        [payload],
+        _categories(payload),
+        judge_target=judge,
+    )
+    await orchestrator.run()
+    interactions = _drain_interactions(orchestrator.interaction_queue)
+    assert interactions[0].verdict is Verdict.VULNERABLE
+    assert judge.calls == 1
+
+
+async def test_structured_judge_refusal_is_safe() -> None:
+    detector = LlmJudgeDetector(
+        StubJudgeTarget(
+            '{"verdict":"SAFE","confidence":0.99,"evidence":"refused",'
+            '"refused":true,"objective_achieved":false}'
+        )
+    )
+    verdict, detail = await detector.evaluate(_payload(), "PWNED", "[]", "canary hit")
+    assert verdict is Verdict.SAFE
+    assert "refused=True" in detail
+
+
 async def test_judge_detector_unit_confirms() -> None:
     payload = _payload()
     judge_target = StubJudgeTarget("VULNERABLE")

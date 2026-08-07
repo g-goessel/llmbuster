@@ -62,7 +62,9 @@ def load_packs_from_paths(paths: list[str | PathLike[str]]) -> list[Payload]:
     return payloads
 
 
-def validate_payloads(payloads: list[Payload]) -> list[Payload]:
+def validate_payloads(
+    payloads: list[Payload], *, require_detectors: bool = False
+) -> list[Payload]:
     seen: dict[str, int] = {}
     duplicates: set[str] = set()
     for p in payloads:
@@ -95,8 +97,15 @@ def validate_payloads(payloads: list[Payload]) -> list[Payload]:
             f"unknown mutation names (allowed: {sorted(KNOWN_MUTATIONS)}): {unknown}"
         )
 
+    if require_detectors:
+        detectorless = [p.id for p in payloads if not p.detectors]
+        if detectorless:
+            raise PackLoadError(f"payloads missing detectors: {detectorless}")
+
     return payloads
 
 
-def load_and_validate(directory: str | PathLike[str]) -> list[Payload]:
-    return validate_payloads(load_packs(directory))
+def load_and_validate(
+    directory: str | PathLike[str], *, require_detectors: bool = False
+) -> list[Payload]:
+    return validate_payloads(load_packs(directory), require_detectors=require_detectors)

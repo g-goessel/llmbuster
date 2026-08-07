@@ -43,7 +43,7 @@ def _validate_bundled() -> tuple[int, int, dict[str, list[str]]]:
     for pack in packs:
         payload_count += len(pack.payloads)
         try:
-            validate_payloads(list(pack.payloads))
+            validate_payloads(list(pack.payloads), require_detectors=True)
         except PackLoadError as exc:
             pack_errors[pack.category.value] = [str(exc)]
     return len(packs), payload_count, pack_errors

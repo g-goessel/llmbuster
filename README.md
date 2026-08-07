@@ -38,8 +38,8 @@ would. Interactions are logged proxy-style into a portable SQLite DB.
   total `duration_ms` captured from SSE token deltas.
 - **Pluggable targets** — declarative HTTP profiles, Python plugins
   (`importlib`), subprocess commands, and a built-in OpenRouter adapter.
-- **Mutation engine** — base64, leetspeak, and unicode-homoglyph payload
-  variants to probe input-filtering bypasses.
+- **Mutation engine** — encoding, document wrappers, authority framing,
+  leetspeak, translation, and unicode-homoglyph variants.
 - **Detectors** — `CanaryDetector` (exact token) and `RegexDetector` (with
   flags), wired through a small registry.
 - **Reproducibility scoring** — verdicts are rolled up across attempts with a
@@ -112,10 +112,9 @@ would. Interactions are logged proxy-style into a portable SQLite DB.
 - **Payloads** (`llmbuster/payload/`) — YAML pack loader, a mutation engine
   (`base64`, `leetspeak`, `unicode_homoglyph`), and 10 bundled OWASP packs
   (32 payloads) shipped under `llmbuster/resources/packs/`.
-- **Detectors** (`llmbuster/detector/`) — `CanaryDetector` (matches an exact
-  token in the reply) and `RegexDetector` (regex + flags), exposed through a
-  small registry. All bundled packs use `CanaryDetector` to avoid false
-  positives from refusal phrases.
+- **Detectors** (`llmbuster/detector/`) — exact canaries and regexes, with an
+  optional structured LLM judge that can inspect hits, every response, or a
+  deterministic sample of heuristic-safe responses.
 - **Store** (`llmbuster/store/`) — `SQLiteStore` (WAL mode, `foreign_keys=ON`,
   the §3 proxy schema) and `WriterTask`, a single-consumer async task that
   drains the interaction queue and persists serially.
@@ -235,6 +234,9 @@ uv run llmbuster tui
 | `--category LLM0x`| Filter by OWASP category. Repeatable.                    |
 | `--system-prompt` | System prompt prepended to all requests.                |
 | `--escalate`      | Enable escalation chains for vulnerable payloads.        |
+| `--judge-model`   | Model used for optional semantic response evaluation.    |
+| `--judge-mode`    | Judge `hits`, `all`, or a deterministic `sample`.        |
+| `--judge-sample-rate` | Safe-response fraction judged in sample mode.       |
 
 ### `report` options
 
@@ -354,10 +356,10 @@ payloads:
 
 - `category` — one of `LLM01`–`LLM10`.
 - `payloads[].detectors` — list of `canary` (exact token) or `regex`
-  (with optional `flags`) detectors. All bundled packs use `canary` to avoid
-  false positives from refusal phrases matching regex keywords.
-- `payloads[].mutations` — optional list of `base64`, `leetspeak`,
-  `unicode_homoglyph`. Each mutation produces an additional attempt whose
+  (with optional `flags`) detectors. Bundled payloads require a detector;
+  detectorless custom payloads are reported as `inconclusive`.
+- `payloads[].mutations` — optional list including `base64_decode`, document
+  wrappers, `authority_framing`, `leetspeak`, and `unicode_homoglyph`. Each produces an attempt whose
   reply is checked against the same detectors.
 - `payloads[].escalation_to` — id of a follow-up payload run only when this
   one is flagged vulnerable (requires `--escalate`).

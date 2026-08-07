@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from llmbuster.domain.models import (
     ChatHistory,
@@ -183,3 +184,19 @@ async def test_escalation_interaction_payload_id() -> None:
     followup = [i for i in interactions if i.payload_id == "followup"]
     assert len(followup) == 1
     assert followup[0].payload_id == "followup"
+
+
+async def test_escalation_preserves_originating_conversation() -> None:
+    payloads, cats = _esc_pair()
+    orchestrator = ScanOrchestrator(
+        StubTarget(reply="PWNED"),
+        ScanConfig(run_id=1, categories=["LLM01"], escalate=True),
+        payloads,
+        cats,
+    )
+    await orchestrator.run()
+    interactions = _drain_interactions(orchestrator.interaction_queue)
+    followup = next(item for item in interactions if item.payload_id == "b")
+    messages = json.loads(followup.sent_history_json)
+    assert [message["role"] for message in messages] == ["user", "assistant", "user"]
+    assert messages[-1]["content"] == "dig deeper"

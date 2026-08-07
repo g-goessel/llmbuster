@@ -20,7 +20,7 @@ def list_bundled_packs() -> list[str]:
 
 def load_bundled_packs() -> list[Payload]:
     directory = str(files(BUNDLED_PACKS_DIR))
-    return load_and_validate(directory)
+    return load_and_validate(directory, require_detectors=True)
 
 
 def load_bundled_packs_as_packs() -> list[PayloadPack]:

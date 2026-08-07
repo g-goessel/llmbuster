@@ -51,6 +51,11 @@ def test_every_payload_detector_builds_via_registry() -> None:
         assert len(detectors) == len(payload.detectors)
 
 
+def test_every_bundled_payload_has_a_detector() -> None:
+    payloads = load_bundled_packs()
+    assert all(payload.detectors for payload in payloads)
+
+
 def test_escalation_targets_exist_within_pack() -> None:
     packs = load_bundled_packs_as_packs()
     for pack in packs:

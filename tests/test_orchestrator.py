@@ -228,6 +228,20 @@ async def test_null_reply_without_error_is_error() -> None:
     assert "no reply" in interactions[0].detector_detail
 
 
+async def test_payload_without_detectors_is_inconclusive() -> None:
+    payload = Payload(id="no-detector", prompt="test", detectors=[])
+    orchestrator = ScanOrchestrator(
+        StubTarget(reply="anything"),
+        ScanConfig(run_id=1),
+        [payload],
+        _categories([payload]),
+    )
+    await orchestrator.run()
+    interactions = _drain_interactions(orchestrator.interaction_queue)
+    assert interactions[0].verdict is Verdict.INCONCLUSIVE
+    assert interactions[0].detector_detail == "payload has no detectors"
+
+
 async def test_shutdown_sentinel() -> None:
     payloads = [_payload("p1", "hi", repeat=1)]
     target = StubTarget(reply="ok")

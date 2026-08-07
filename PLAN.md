@@ -34,7 +34,7 @@ as a research dataset.
 | CLI | **Typer** (or argparse if Typer unavailable) |
 | JSONPath (profiles) | **jsonpath-ng** |
 | Detection (v1) | Synchronous heuristic + canary-token detectors |
-| Detection (v2) | Async LLM-as-judge (interface designed for it now) |
+| Detection (v2) | Async structured LLM-as-judge (`hits`, `all`, or deterministic `sample`) |
 | Adaptation (v1) | Static escalation chains + payload mutation |
 | Adaptation (v2) | Agentic attacker-LLM |
 | Packaging | **uv / pipx** primary; PyInstaller single-file + Docker as extras |
@@ -155,12 +155,14 @@ payloads:
     detectors:
       - type: canary               # vulnerable if `token` appears verbatim in reply
         token: "PWNED"
-    mutations: [base64, leetspeak]  # optional; names resolved by the mutation engine
+    mutations: [base64_decode, quoted_document]  # optional; resolved by mutation engine
     escalation_to: llm01-extract-system-prompt   # optional follow-up payload id
 ```
 
 Detector entries are objects with a `type` discriminator. v1 supports
-`type: canary` (`token`) and `type: regex` (`pattern`, optional `flags`).
+`type: canary` (`token`) and `type: regex` (`pattern`, optional `flags`). Bundled
+payloads must define at least one detector. Detectorless custom payloads evaluate
+as `inconclusive`, never `safe`.
 
 ---
 
@@ -459,7 +461,9 @@ class Detector(Protocol):
 
 #### T2.4 — Payload mutation engine
 - **Goal:** `mutate(text: str, name: str) -> str` for `base64`, `leetspeak`,
-  `unicode_homoglyph`. (`translation` = v2 stub raising NotImplemented.)
+  `unicode_homoglyph`, `translation`, and actionable attack templates:
+  `base64_decode`, `json_wrap`, `xml_wrap`, `markdown_wrap`, `quoted_document`,
+  and `authority_framing`.
 - **Test:** Input + mutation name → exact expected output; unknown mutation raises.
 - **Depends on:** T2.1
 
@@ -598,10 +602,9 @@ artifact exists after **Milestone 5**.
 
 - **Repeater:** load an interaction row, edit `sent_history_json`/payload in the
   TUI, re-send, store linked via a new `replayed_from` column.
-- **LLM-as-judge** async detector (slots into the `Detector` protocol).
 - **Agentic adaptation:** attacker-LLM generates next payloads from prior responses.
 - **DuckDB export** for heavy analytical blog queries.
-- **Real `translation` mutation.**
+- **Full multilingual translation mutation.**
 - **Scan resume / checkpointing.**
 - **Escalation provenance fix:** `_run_escalations` hardcodes
   `escalation_from=None` because interaction DB ids are assigned

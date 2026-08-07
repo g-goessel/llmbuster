@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from dataclasses import dataclass
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from llmbuster.detector.judge import LlmJudgeDetector
 from llmbuster.detector.registry import default_registry
@@ -32,6 +35,8 @@ class ScanConfig(BaseModel):
     categories: list[str] | None = None
     escalate: bool = False
     judge_model: str | None = None
+    judge_mode: Literal["hits", "all", "sample"] = "hits"
+    judge_sample_rate: float = Field(default=0.25, ge=0.0, le=1.0)
 
 
 class ProgressEvent(BaseModel):
@@ -52,6 +57,7 @@ class WorkItem:
     mutation: str | None
     owasp_category: OwaspCategory
     escalation_from: int | None = None
+    prior_history: ChatHistory | None = None
 
 
 class ScanOrchestrator:
@@ -179,12 +185,27 @@ class ScanOrchestrator:
                     mutation=None,
                     owasp_category=cat,
                     escalation_from=None,
+                    prior_history=self._history_for_escalation(interactions),
                 )
             )
         if not items:
             return
         tasks = [asyncio.create_task(self._worker(item)) for item in items]
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    @staticmethod
+    def _history_for_escalation(interactions: list[Interaction]) -> ChatHistory | None:
+        source = next((item for item in interactions if item.verdict is Verdict.VULNERABLE), None)
+        if source is None:
+            return None
+        try:
+            messages = json.loads(source.sent_history_json)
+            history = ChatHistory.model_validate({"messages": messages})
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if source.response_text is not None:
+            history.append_assistant(source.response_text)
+        return history
 
     async def _worker(self, item: WorkItem) -> None:
         async with self._semaphore:
@@ -205,8 +226,12 @@ class ScanOrchestrator:
                 prompt = item.payload.prompt
                 if item.mutation is not None:
                     prompt = mutate(prompt, item.mutation)
-                history = ChatHistory()
-                if self._config.system_prompt:
+                history = (
+                    item.prior_history.clone()
+                    if item.prior_history is not None
+                    else ChatHistory()
+                )
+                if item.prior_history is None and self._config.system_prompt:
                     history.append(
                         Message(role=Role.SYSTEM, content=self._config.system_prompt)
                     )
@@ -267,17 +292,26 @@ class ScanOrchestrator:
             return Verdict.ERROR, None, "no reply extracted from response"
         detectors = default_registry.build_from_payload(payload)
         if not detectors:
-            return Verdict.SAFE, None, None
+            return Verdict.INCONCLUSIVE, None, "payload has no detectors"
         results = [d.evaluate(payload, response.reply) for d in detectors]
+        heuristic_verdict = Verdict.SAFE
+        heuristic_detail = results[0][1]
+        heuristic_id: str | None = None
         for idx, (v, detail) in enumerate(results):
             if v is Verdict.VULNERABLE:
-                if self._judge_target is not None:
-                    judge = LlmJudgeDetector(detectors[idx], self._judge_target)
-                    jv, jdetail = await judge.evaluate(
-                        payload, response.reply, sent_history_json
-                    )
-                    return jv, "LlmJudgeDetector", jdetail
-                return Verdict.VULNERABLE, type(detectors[idx]).__name__, detail
+                heuristic_verdict = Verdict.VULNERABLE
+                heuristic_detail = detail
+                heuristic_id = type(detectors[idx]).__name__
+                break
+        if self._should_judge(payload, sent_history_json, heuristic_verdict):
+            assert self._judge_target is not None
+            judge = LlmJudgeDetector(self._judge_target)
+            jv, jdetail = await judge.evaluate(
+                payload, response.reply, sent_history_json, heuristic_detail
+            )
+            return jv, "LlmJudgeDetector", jdetail
+        if heuristic_verdict is Verdict.VULNERABLE:
+            return heuristic_verdict, heuristic_id, heuristic_detail
         for v, detail in results:
             if v is Verdict.ERROR:
                 return Verdict.ERROR, None, detail
@@ -285,3 +319,16 @@ class ScanOrchestrator:
             if v is Verdict.INCONCLUSIVE:
                 return Verdict.INCONCLUSIVE, None, detail
         return Verdict.SAFE, None, results[0][1] if results else None
+
+    def _should_judge(
+        self, payload: Payload, sent_history_json: str, heuristic_verdict: Verdict
+    ) -> bool:
+        if self._judge_target is None:
+            return False
+        if heuristic_verdict is Verdict.VULNERABLE or self._config.judge_mode == "all":
+            return True
+        if self._config.judge_mode != "sample":
+            return False
+        key = f"{self._config.run_id}:{payload.id}:{sent_history_json}".encode()
+        fraction = int.from_bytes(hashlib.sha256(key).digest()[:8]) / 2**64
+        return fraction < self._config.judge_sample_rate
